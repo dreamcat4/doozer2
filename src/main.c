@@ -177,10 +177,12 @@ main(int argc, char **argv)
   pthread_sigmask(SIG_UNBLOCK, &set, NULL);
 
   while(running) {
-    if(reload)
+    if(reload) {
+      reload = 0;
       if(!cfg_load(NULL)) {
         refresh_subsystems();
       }
+    }
     pause();
   }
 
