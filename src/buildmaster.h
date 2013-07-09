@@ -1,0 +1,18 @@
+#pragma once
+
+#include "project.h"
+
+int buildmaster_check_for_builds(project_t *p);
+
+void buildmaster_init(void);
+
+typedef struct buildjob {
+  int id;
+  char revision[64];
+  char target[64];
+  char jobsecret[64];
+  char project[128];
+  char version[64];
+  int no_output;
+  struct conn *db;
+} buildjob_t;
