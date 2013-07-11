@@ -53,11 +53,13 @@ conn_t *db_get_conn(void);
 
 void db_init(void);
 
-#define DB_RESULT_TAG_STR 1
-#define DB_RESULT_TAG_INT 2
+#define DB_RESULT_TAG_STR  1
+#define DB_RESULT_TAG_INT  2
+#define DB_RESULT_TAG_TIME 3
 
 #define DB_RESULT_STRING(x) DB_RESULT_TAG_STR, x, sizeof(x)
 #define DB_RESULT_INT(x)    DB_RESULT_TAG_INT, &x
+#define DB_RESULT_TIME(x)   DB_RESULT_TAG_TIME, &x
 
 int db_stmt_exec(MYSQL_STMT *s, const char *fmt, ...);
 

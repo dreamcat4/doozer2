@@ -194,8 +194,11 @@ db_stream_row(int flags, MYSQL_STMT *s, ...)
 
   MYSQL_BIND out[fields];
   unsigned long lens[fields];
+  MYSQL_TIME times[fields];
+  time_t *tptr[fields];
   int type;
   int p = 0, i;
+  struct tm tm = {};
 
   memset(out, 0, sizeof(MYSQL_BIND) * fields);
   memset(lens, 0, sizeof(unsigned long) * fields);
@@ -217,6 +220,14 @@ db_stream_row(int flags, MYSQL_STMT *s, ...)
       out[p].buffer = va_arg(ap, int *);
       out[p].buffer_length = sizeof(int);
       out[p].length = &lens[p];
+      break;
+
+    case DB_RESULT_TAG_TIME:
+      out[p].buffer_type = MYSQL_TYPE_TIMESTAMP;
+      out[p].buffer = (char *)&times[p];
+      out[p].buffer_length = sizeof(MYSQL_TIME);
+
+      tptr[p] = va_arg(ap, time_t *);
       break;
 
     default:
@@ -243,8 +254,30 @@ db_stream_row(int flags, MYSQL_STMT *s, ...)
   switch(mysql_stmt_fetch(s)) {
   case 0:
     for(i = 0; i < p; i++) {
-      if(out[i].buffer_type == MYSQL_TYPE_STRING)
+      switch(out[i].buffer_type) {
+      case MYSQL_TYPE_STRING:
         ((char *)out[i].buffer)[lens[i]] = 0;
+        break;
+      case MYSQL_TYPE_TIMESTAMP:
+        if(times[i].year == 0) {
+          *tptr[i] = 0;
+          break;
+        }
+
+        tm.tm_sec  = times[i].second;
+        tm.tm_min  = times[i].minute;
+        tm.tm_hour = times[i].hour;
+        tm.tm_mday = times[i].day;
+        tm.tm_mon  = times[i].month - 1;
+        tm.tm_year = times[i].year - 1900;
+        // This is crap
+        tm.tm_isdst = -1;
+        *tptr[i] = mktime(&tm);
+        break;
+
+      default:
+        break;
+      }
     }
     return 0;
 
