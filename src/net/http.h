@@ -51,6 +51,8 @@ typedef struct http_connection {
 
   struct http_arg_list hc_args;
 
+  struct http_arg_list hc_response_headers;
+
   struct http_arg_list hc_req_args; /* Argumets from GET or POST request */
 
   enum {
@@ -100,7 +102,11 @@ void http_arg_flush(struct http_arg_list *list);
 
 char *http_arg_get(struct http_arg_list *list, const char *name);
 
-void http_arg_set(struct http_arg_list *list, char *key, char *val);
+int http_arg_get_int(struct http_arg_list *list, const char *name,
+                     int def);
+
+void http_arg_set(struct http_arg_list *list,
+                  const char *key, const char *val);
 
 int http_tokenize(char *buf, char **vec, int vecsize, int delimiter);
 

@@ -167,7 +167,7 @@ http_send_header(http_connection_t *hc, int rc, const char *content,
 		 val2str(hc->hc_version, HTTP_versiontab),
 		 rc, http_rc2str(rc));
 
-  htsbuf_qprintf(&hdrs, "Server: doozer-serve\r\n");
+  htsbuf_qprintf(&hdrs, "Server: doozer2\r\n");
 
   if(maxage == 0) {
     htsbuf_qprintf(&hdrs, "Cache-Control: no-cache\r\n");
@@ -194,7 +194,7 @@ http_send_header(http_connection_t *hc, int rc, const char *content,
   }
 
   if(rc == HTTP_STATUS_UNAUTHORIZED)
-    htsbuf_qprintf(&hdrs, "WWW-Authenticate: Basic realm=\"httpbench\"\r\n");
+    htsbuf_qprintf(&hdrs, "WWW-Authenticate: Basic realm=\"doozer\"\r\n");
 
   if(contentlen > 0)
     htsbuf_qprintf(&hdrs, "Content-Length: %"PRId64"\r\n", contentlen);
@@ -224,7 +224,11 @@ http_send_header(http_connection_t *hc, int rc, const char *content,
 
   if(disposition != NULL)
     htsbuf_qprintf(&hdrs, "Content-Disposition: %s\r\n", disposition);
-  
+
+  http_arg_t *ra;
+  TAILQ_FOREACH(ra, &hc->hc_response_headers, link)
+    htsbuf_qprintf(&hdrs, "%s: %s\r\n", ra->key, ra->val);
+
   htsbuf_qprintf(&hdrs, "\r\n");
   //  fprintf(stderr, "-- OUTPUT ------------------\n");
   //  htsbuf_dump_raw_stderr(&hdrs);
@@ -564,10 +568,23 @@ http_arg_get(struct http_arg_list *list, const char *name)
 
 
 /**
+ *
+ */
+int
+http_arg_get_int(struct http_arg_list *list, const char *name,
+                 int def)
+{
+  const char *arg = http_arg_get(list, name);
+  return arg ? atoi(arg) : def;
+}
+
+
+/**
  * Set an argument associated with a connection
  */
 void
-http_arg_set(struct http_arg_list *list, char *key, char *val)
+http_arg_set(struct http_arg_list *list, const char *key,
+             const char *val)
 {
   http_arg_t *ra;
 
@@ -768,6 +785,7 @@ http_serve_requests(http_connection_t *hc, htsbuf_queue_t *spill)
 
     http_arg_flush(&hc->hc_args);
     http_arg_flush(&hc->hc_req_args);
+    http_arg_flush(&hc->hc_response_headers);
 
     htsbuf_queue_flush(&hc->hc_reply);
 
@@ -796,6 +814,7 @@ http_serve(int fd, void *opaque, struct sockaddr_in *peer,
 
   TAILQ_INIT(&hc.hc_args);
   TAILQ_INIT(&hc.hc_req_args);
+  TAILQ_INIT(&hc.hc_response_headers);
 
   hc.hc_fd = fd;
   hc.hc_peer = peer;
@@ -811,7 +830,7 @@ http_serve(int fd, void *opaque, struct sockaddr_in *peer,
 
   http_arg_flush(&hc.hc_args);
   http_arg_flush(&hc.hc_req_args);
-
+  http_arg_flush(&hc.hc_response_headers);
   htsbuf_queue_flush(&spill);
   close(fd);
 }
