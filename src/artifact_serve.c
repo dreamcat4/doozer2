@@ -35,13 +35,11 @@ send_artifact(http_connection_t *hc, const char *remain, void *opaque)
   if(remain == NULL)
     return 404;
 
-  int id = atoi(remain);
-
   conn_t *c = db_get_conn();
   if(c == NULL)
     return 500;
 
-  if(db_stmt_exec(c->get_artifact, "i", id))
+  if(db_stmt_exec(c->get_artifact_by_sha1, "s", remain))
     return 500;
 
   char storage[32];
@@ -51,7 +49,7 @@ send_artifact(http_connection_t *hc, const char *remain, void *opaque)
   char type[128];
   char content_type[128];
   char content_encoding[128];
-  int r = db_stream_row(0, c->get_artifact,
+  int r = db_stream_row(0, c->get_artifact_by_sha1,
                         DB_RESULT_STRING(storage),
                         DB_RESULT_STRING(payload),
                         DB_RESULT_STRING(project),
@@ -61,7 +59,7 @@ send_artifact(http_connection_t *hc, const char *remain, void *opaque)
                         DB_RESULT_STRING(content_encoding),
                         NULL);
 
-  mysql_stmt_reset(c->get_artifact);
+  mysql_stmt_reset(c->get_artifact_by_sha1);
 
   switch(r) {
   case DB_ERR_OTHER:
@@ -100,16 +98,16 @@ send_artifact(http_connection_t *hc, const char *remain, void *opaque)
     int fd = open(path, O_RDONLY);
     if(fd == -1) {
       trace(LOG_INFO,
-            "Missing file '%s' for artifact %d in project %s -- %s",
-            path, id, project, strerror(errno));
+            "Missing file '%s' for artifact %s in project %s -- %s",
+            path, remain, project, strerror(errno));
       return 404;
     }
 
     struct stat st;
     if(fstat(fd, &st)) {
       trace(LOG_INFO,
-            "Stat failed for file '%s' for artifact %d in project %s -- %s",
-            path, id, project, strerror(errno));
+            "Stat failed for file '%s' for artifact %s in project %s -- %s",
+            path, remain, project, strerror(errno));
       close(fd);
       return 404;
     }
@@ -190,7 +188,6 @@ send_artifact(http_connection_t *hc, const char *remain, void *opaque)
       }
     }
     close(fd);
-    return 0;
 
   } else if(!strcmp(storage, "s3")) {
 
@@ -228,7 +225,7 @@ send_artifact(http_connection_t *hc, const char *remain, void *opaque)
     return 501;
   }
 
-  db_stmt_exec(c->incr_dlcount, "i", id);
+  db_stmt_exec(c->incr_dlcount_by_sha1, "s", remain);
   return 0;
 }
 

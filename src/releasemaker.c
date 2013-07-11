@@ -143,7 +143,7 @@ generate_update_manifest(project_t *p, struct build_queue *builds,
   if(pc == NULL)
     return;
 
-  const char *baseurl = cfg_get_str(pc, CFG("updateManifest", "baseurl"), NULL);
+  const char *baseurl = cfg_get_str(root, CFG("artifactPrefix"), NULL);
   if(baseurl == NULL)
     return;
 
@@ -195,8 +195,8 @@ generate_update_manifest(project_t *p, struct build_queue *builds,
         htsmsg_add_str(artifact, "type", a->a_type);
         htsmsg_add_str(artifact, "sha1", a->a_sha1);
         htsmsg_add_u32(artifact, "size", a->a_size);
-        snprintf(url, sizeof(url), "%s/file/%d",
-                 baseurl, a->a_id);
+        snprintf(url, sizeof(url), "%s/file/%s",
+                 baseurl, a->a_sha1);
         htsmsg_add_str(artifact, "url",url);
         htsmsg_add_msg(artifacts, NULL, artifact);
       }
