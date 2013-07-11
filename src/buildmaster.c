@@ -228,7 +228,7 @@ getjob(char **targets, unsigned int numtargets, buildjob_t *bj,
   db_begin(c);
 
   if(mysql_stmt_execute(s)) {
-    trace(LOG_ERR, "Failed to execute prepared statement %s -- %s",
+    trace(LOG_ERR, "Failed to execute statement %s -- %s",
           mysql_stmt_sqlstate(s), mysql_stmt_error(s));
     return -1;
   }
