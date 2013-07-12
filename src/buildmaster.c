@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/types.h>
-#include <regex.h>
+#include <fnmatch.h>
 #include <unistd.h>
 #include <limits.h>
 #include <sys/stat.h>
@@ -37,19 +37,8 @@ find_branch_config(project_t *p, cfg_t *bmconf, const char *id)
       continue;
 
     const char *pattern = htsmsg_get_str(m, "pattern");
-    if(pattern == NULL)
-      continue;
-
-    regex_t preg;
-
-    if(regcomp(&preg, pattern, 0))
-      continue;
-
-    int match = regexec(&preg, id, 0, NULL, 0);
-    regfree(&preg);
-    if(match == REG_NOMATCH)
-      continue;
-    return m;
+    if(pattern != NULL && !fnmatch(pattern, id, FNM_PATHNAME))
+      return m;
   }
   return NULL;
 }
