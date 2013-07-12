@@ -174,12 +174,12 @@ generate_update_manifest(project_t *p, struct build_queue *builds,
 
       if(b == NULL) {
         plog(p, logctx,
-             "Manifest: Target %s: Track '%s' have no matching branch for pattern '%s'",
+             "Manifest: Target %s: Track '%s' no matching branch for '%s'",
               t->t_target, track, branch);
         continue;
       }
       plog(p, logctx,
-           "Manifest: Target %s: Track '%s' best matching branch '%s' for pattern '%s'",
+           "Manifest: Target %s: Track '%s' matching branch '%s' for '%s'",
            t->t_target, track, b->b_branch, branch);
 
       htsmsg_t *out = htsmsg_create_map();
@@ -195,15 +195,14 @@ generate_update_manifest(project_t *p, struct build_queue *builds,
         htsmsg_add_str(artifact, "type", a->a_type);
         htsmsg_add_str(artifact, "sha1", a->a_sha1);
         htsmsg_add_u32(artifact, "size", a->a_size);
-        snprintf(url, sizeof(url), "%s/file/%s",
-                 baseurl, a->a_sha1);
-        htsmsg_add_str(artifact, "url",url);
+        snprintf(url, sizeof(url), "%s/file/%s", baseurl, a->a_sha1);
+        htsmsg_add_str(artifact, "url", url);
         htsmsg_add_msg(artifacts, NULL, artifact);
       }
       htsmsg_add_msg(out, "artifacts", artifacts);
 
       struct change_queue cq;
-      if(!git_changelog(&cq, p, b->b_revision, 0, 100, 0, t->t_target)) {
+      if(!git_changelog(&cq, p, b->b_revision, 0, 100, 0, b->b_target)) {
         htsmsg_t *changelog = htsmsg_create_list();
         change_t *c;
         TAILQ_FOREACH(c, &cq, link) {
@@ -213,6 +212,7 @@ generate_update_manifest(project_t *p, struct build_queue *builds,
           htsmsg_add_msg(changelog, NULL, e);
         }
         htsmsg_add_msg(out, "changelog", changelog);
+        git_changlog_free(&cq);
       }
 
       char *json = htsmsg_json_serialize_to_str(out, 1);
@@ -220,7 +220,7 @@ generate_update_manifest(project_t *p, struct build_queue *builds,
 
       char path[PATH_MAX];
       snprintf(path, sizeof(path), "%s/%s-%s.json",
-               outpath, track, t->t_target);
+               outpath, track, b->b_target);
 
       int err = writefile(path, json, strlen(json));
       if(err == WRITEFILE_NO_CHANGE) {
@@ -232,9 +232,10 @@ generate_update_manifest(project_t *p, struct build_queue *builds,
       } else {
         char logctx[128];
         snprintf(logctx, sizeof(logctx), "release/manifest/publish/%s",
-                 t->t_target);
+                 b->b_target);
         plog(p, logctx,
-             "New release '%s' published for %s", b->b_version, b->b_target);
+             "New release '%s' available for %s",
+             b->b_version, b->b_target);
       }
       free(json);
     }
