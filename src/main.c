@@ -113,6 +113,7 @@ static void
 refresh_subsystems(void)
 {
   irc_refresh_config();
+  projects_reload();
 }
 
 

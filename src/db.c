@@ -65,16 +65,13 @@ db_get_conn(void)
 
     cfg_root(cfg);
 
-    const char *username =
-      cfg_get_str(cfg, CFG("buildmaster", "db", "username"), NULL);
-    const char *password =
-      cfg_get_str(cfg, CFG("buildmaster", "db", "password"), NULL);
-    const char *database =
-      cfg_get_str(cfg, CFG("buildmaster", "db", "database"), NULL);
+    const char *username = cfg_get_str(cfg, CFG("db", "username"), NULL);
+    const char *password = cfg_get_str(cfg, CFG("db", "password"), NULL);
+    const char *database = cfg_get_str(cfg, CFG("db", "database"), NULL);
 
     if(mysql_real_connect(m, "localhost", username,
                           password, database, 0, NULL, 0) != m) {
-      trace(LOG_ERR, "Failed to connect: Error: %s\n", mysql_error(m));
+      trace(LOG_ERR, "Failed to connect: Error: %s", mysql_error(m));
       mysql_close(m);
       return NULL;
     }
@@ -107,6 +104,21 @@ static void
 db_cleanup(void *aux)
 {
   conn_t *c = aux;
+
+  mysql_stmt_close(c->get_artifact_by_sha1);
+  mysql_stmt_close(c->incr_dlcount_by_sha1);
+  mysql_stmt_close(c->get_targets_for_build);
+  mysql_stmt_close(c->insert_build);
+  mysql_stmt_close(c->alloc_build);
+  mysql_stmt_close(c->get_build_by_id);
+  mysql_stmt_close(c->insert_artifact);
+  mysql_stmt_close(c->build_progress_update);
+  mysql_stmt_close(c->build_finished);
+  mysql_stmt_close(c->get_expired_builds);
+  mysql_stmt_close(c->restart_build);
+  mysql_stmt_close(c->get_releases);
+  mysql_stmt_close(c->get_artifacts);
+
   mysql_close(c->m);
   free(c);
 }
@@ -196,7 +208,6 @@ db_stream_row(int flags, MYSQL_STMT *s, ...)
   unsigned long lens[fields];
   MYSQL_TIME times[fields];
   time_t *tptr[fields];
-  int type;
   int p = 0, i;
   struct tm tm = {};
 
@@ -206,7 +217,8 @@ db_stream_row(int flags, MYSQL_STMT *s, ...)
   va_list ap;
   va_start(ap, s);
 
-  while((type = va_arg(ap, int)) != 0 && p < fields) {
+  while(p < fields) {
+    int type = va_arg(ap, int);
     switch(type) {
     case DB_RESULT_TAG_STR:
       out[p].buffer_type = MYSQL_TYPE_STRING;

@@ -34,6 +34,8 @@ typedef struct project {
 
 project_t *project_get(const char *id);
 
+project_t *project_init(const char *id, int forceinit);
+
 void projects_reload(void);
 
 void projects_init(void);

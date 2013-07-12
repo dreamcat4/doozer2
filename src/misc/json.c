@@ -37,6 +37,7 @@ static const char *json_parse_value(const char *s, void *parent,
 static const char *
 skip_ws(const char *s)
 {
+ again:
   while(*s > 0 && *s < 33)
     s++;
 
@@ -48,6 +49,7 @@ skip_ws(const char *s)
 
     if(*s == '\n')
       s++;
+    goto again;
   }
 
   while(*s > 0 && *s < 33)

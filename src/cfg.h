@@ -11,7 +11,9 @@ void cfg_releasep(cfg_t **p);
 
 #define cfg_root(x) cfg_t *x __attribute__((cleanup(cfg_releasep))) = cfg_get_root();
 
-cfg_t *cfg_get_project(cfg_t *c, const char *id);
+#define cfg_project(x, id) cfg_t *x __attribute__((cleanup(cfg_releasep))) = cfg_get_project(id);
+
+cfg_t *cfg_get_project(const char *id);
 
 #define CFG(name...) (const char *[]){name, NULL}
 #define CFGI(x) (const char *[]){HTSMSG_INDEX(x), NULL}

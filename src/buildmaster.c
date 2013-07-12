@@ -63,8 +63,7 @@ buildmaster_check_for_builds(project_t *p)
   int retval = 0;
   plog(p, "build/check", "Checking if need to build anything");
 
-  cfg_root(root);
-  cfg_t *pc = cfg_get_project(root, p->p_id);
+  cfg_project(pc, p->p_id);
   if(pc == NULL)
     return DOOZER_ERROR_PERMANENT;
 
@@ -304,7 +303,6 @@ http_getjob(http_connection_t *hc, const char *remain, void *opaque)
 
     buildjob_t bj;
     int r = getjob(targets, numtargets, &bj, agent);
-    cfg_t *pc;
 
     switch(r) {
     default:
@@ -332,8 +330,8 @@ http_getjob(http_connection_t *hc, const char *remain, void *opaque)
       sleep(1);
       continue;
 
-    case 0:
-      pc = cfg_get_project(root, bj.project);
+    case 0: {
+      cfg_project(pc, bj.project);
       if(pc == NULL) {
         db_rollback(bj.db);
         return 503;
@@ -378,6 +376,7 @@ http_getjob(http_connection_t *hc, const char *remain, void *opaque)
         db_commit(bj.db);
       }
       return 0;
+    }
     }
   }
 }
@@ -470,8 +469,7 @@ http_artifact(http_connection_t *hc, const char *remain, void *opaque)
     return 403;
   }
 
-  cfg_root(root);
-  cfg_t *pc = cfg_get_project(root, project);
+  cfg_project(pc, project);
   if(pc == NULL)
     return 410;
 
@@ -741,10 +739,10 @@ buildmaster_check_expired_builds(conn_t *c)
 static void *
 buildmaster_periodic(void *aux)
 {
-  conn_t *c = db_get_conn();
-
   while(1) {
-    buildmaster_check_expired_builds(c);
+    conn_t *c = db_get_conn();
+    if(c != NULL)
+      buildmaster_check_expired_builds(c);
     sleep(60);
   }
   return NULL;

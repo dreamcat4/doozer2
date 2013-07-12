@@ -139,7 +139,7 @@ generate_update_manifest(project_t *p, struct build_queue *builds,
   artifact_t *a;
   target_t *t;
   cfg_root(root);
-  cfg_t *pc = cfg_get_project(root, p->p_id);
+  cfg_project(pc, p->p_id);
   if(pc == NULL)
     return;
 

@@ -3,6 +3,8 @@
 #include <unistd.h>
 #include <stdarg.h>
 #include <fnmatch.h>
+#include <dirent.h>
+#include <errno.h>
 
 #include "doozer.h"
 #include "project.h"
@@ -13,6 +15,7 @@
 #include "irc.h"
 
 #include "misc/misc.h"
+#include "misc/htsmsg_json.h"
 
 LIST_HEAD(project_list, project);
 
@@ -29,9 +32,8 @@ void
 plog(project_t *p, const char *ctx, const char *fmt, ...)
 {
   char buf[2048];
-  cfg_root(root);
 
-  cfg_t *pc = cfg_get_project(root, p->p_id);
+  cfg_project(pc, p->p_id);
   if(pc == NULL)
     return;
 
@@ -106,62 +108,47 @@ plog(project_t *p, const char *ctx, const char *fmt, ...)
 project_t *
 project_get(const char *id)
 {
-  cfg_root(root);
-
-  cfg_t *pc = cfg_get_project(root, id);
-  if(pc == NULL)
-    return NULL;
-
   scoped_lock(&projects_mutex);
 
   project_t *p;
 
   LIST_FOREACH(p, &projects, p_link) {
-    if(!strcmp(p->p_id, id))
-      break;
+    if(!strcmp(p->p_id, id)) {
+      LIST_REMOVE(p, p_link);
+      LIST_INSERT_HEAD(&projects, p, p_link);
+      return p;
+    }
   }
-  return p;
+  return NULL;
 }
 
 
 /**
  *
  */
-void
-projects_reload(void)
+project_t *
+project_init(const char *id, int forceinit)
 {
-  cfg_root(root);
-  scoped_lock(&projects_mutex);
+  project_t *p = project_get(id);
+  if(p == NULL) {
 
-  htsmsg_t *m = htsmsg_get_map(root, "projects");
-
-  htsmsg_field_t *f;
-  HTSMSG_FOREACH(f, m) {
-    const char *id = f->hmf_name;
-    htsmsg_t *pc = htsmsg_get_map_by_field(f);
-    if(pc == NULL)
-      continue;
-
-    project_t *p;
-
-    LIST_FOREACH(p, &projects, p_link) {
-      if(!strcmp(p->p_id, id))
-        break;
-    }
-
-    if(p == NULL) {
-      p = calloc(1, sizeof(project_t));
-      pthread_mutex_init(&p->p_repo_mutex, NULL);
-      p->p_id = strdup(id);
-      LIST_INSERT_HEAD(&projects, p, p_link);
-      trace(LOG_INFO, "Project %s loaded", id);
-      p->p_pending_jobs |=
-        PROJECT_JOB_UPDATE_REPO |
-        PROJECT_JOB_CHECK_FOR_BUILDS |
-        PROJECT_JOB_GENERATE_RELEASES;
-    }
+    p = calloc(1, sizeof(project_t));
+    pthread_mutex_init(&p->p_repo_mutex, NULL);
+    p->p_id = strdup(id);
+    LIST_INSERT_HEAD(&projects, p, p_link);
+    trace(LOG_INFO, "Project %s initialized", p->p_id);
+    forceinit = 1;
   }
-  pthread_cond_signal(&projects_cond);
+
+  if(forceinit) {
+    p->p_pending_jobs |=
+      PROJECT_JOB_UPDATE_REPO |
+      PROJECT_JOB_CHECK_FOR_BUILDS |
+      PROJECT_JOB_GENERATE_RELEASES;
+
+    pthread_cond_signal(&projects_cond);
+  }
+  return p;
 }
 
 

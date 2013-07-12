@@ -78,9 +78,7 @@ send_artifact(http_connection_t *hc, const char *remain, void *opaque)
 
   } else if(!strcmp(storage, "file")) {
 
-    cfg_root(cfg);
-
-    cfg_t *pc = cfg_get_project(cfg, project);
+    cfg_project(pc, project);
     if(pc == NULL)
       return 404;
 
@@ -191,9 +189,7 @@ send_artifact(http_connection_t *hc, const char *remain, void *opaque)
 
   } else if(!strcmp(storage, "s3")) {
 
-    cfg_root(cfg);
-
-    cfg_t *p = cfg_get_project(cfg, project);
+    cfg_project(p, project);
     if(p == NULL)
       return 404;
 

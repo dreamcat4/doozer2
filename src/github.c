@@ -46,8 +46,7 @@ http_github(http_connection_t *hc, const char *remain, void *opaque)
     return 400;
   }
 
-  cfg_root(root);
-  cfg_t *pc = cfg_get_project(root, pid);
+  cfg_project(pc, pid);
   if(pc == NULL)
     return 404;
 

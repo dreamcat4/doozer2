@@ -91,13 +91,12 @@ int
 git_repo_sync(project_t *p)
 {
   scoped_lock(&p->p_repo_mutex);
-  cfg_root(root);
 
   int retval;
   if((retval = ensure_repo(p)))
     return retval;
 
-  cfg_t *pc = cfg_get_project(root, p->p_id);
+  cfg_project(pc, p->p_id);
   if(pc == NULL)
     return DOOZER_ERROR_PERMANENT;
 
@@ -176,6 +175,7 @@ git_repo_list_branches(project_t *p, struct ref_list *bl)
     git_oid_cpy(&b->oid, git_reference_target(ref));
     git_oid_fmt(b->oidtxt, &b->oid);
     LIST_INSERT_HEAD(bl, b, link);
+    git_reference_free(ref);
   }
   git_reference_iterator_free(iter);
   return 0;
