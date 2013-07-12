@@ -97,7 +97,11 @@ ALTER TABLE artifact ADD COLUMN encoding TEXT;
 
 CREATE INDEX artifact_sha1 ON artifact (sha1);
 
-----
+--- 008
+
+ALTER TABLE build MODIFY project VARCHAR(64);
+CREATE INDEX build_project ON build (project);
+
 
 SHOW COLUMNS FROM build;
 

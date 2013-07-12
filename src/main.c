@@ -24,6 +24,7 @@
 #include "buildmaster.h"
 #include "irc.h"
 #include "github.h"
+#include "restapi.h"
 
 #include <sys/types.h>
 #include <regex.h>
@@ -163,6 +164,8 @@ main(int argc, char **argv)
   buildmaster_init();
 
   github_init();
+
+  restapi_init();
 
   running = 1;
   sigemptyset(&set);

@@ -40,6 +40,7 @@ SRCS =  src/main.c \
 	src/releasemaker.c \
 	src/irc.c \
 	src/github.c \
+	src/restapi.c \
 
 SRCS +=	src/misc/misc.c \
 	src/misc/htsbuf.c \
