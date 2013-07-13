@@ -47,8 +47,10 @@ http_github(http_connection_t *hc, const char *remain, void *opaque)
   }
 
   cfg_project(pc, pid);
-  if(pc == NULL)
+  if(pc == NULL) {
+    trace(LOG_DEBUG, "github: Project '%s' not configured", pid);
     return 404;
+  }
 
   const char *mykey = cfg_get_str(pc, CFG("github", "key"), "");
 
