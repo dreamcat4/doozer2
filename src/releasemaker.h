@@ -11,6 +11,7 @@ typedef struct artifact {
   int a_id;
   char a_type[64];
   char a_sha1[51];
+  char a_name[64];
   int a_size;
 } artifact_t;
 

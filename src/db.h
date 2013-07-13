@@ -47,7 +47,7 @@ typedef struct conn {
 
 #define SQL_GET_RELEASES "SELECT id,branch,target,version,revision FROM build INNER JOIN (SELECT max(id) AS id FROM build WHERE status='done' AND project=? GROUP BY target,branch) latest USING (id)"
 
-#define SQL_GET_ARTIFACTS "SELECT id,type,sha1,size FROM artifact WHERE build_id = ?"
+#define SQL_GET_ARTIFACTS "SELECT id,type,sha1,size,name FROM artifact WHERE build_id = ?"
 
 conn_t *db_get_conn(void);
 

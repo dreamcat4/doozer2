@@ -56,8 +56,8 @@ void project_schedule_job(project_t *p, int mask);
  *   build/status                    - Modification of build status
  *
  *   release/check                   - Releasemaker check
- *   release/manifest/info/<arch>    - JSON manifest updates
- *   release/manifest/publish/<arch> - New relases published in JSON manifest
+ *   release/info/<arch>             - JSON manifest updates
+ *   release/publish/<arch>          - New relases published in JSON manifest
  *
  *   git/repo                        - Updates to repo
  */

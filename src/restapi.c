@@ -1,8 +1,10 @@
 #include <string.h>
 #include <stdio.h>
+#include <limits.h>
 
 #include "net/http.h"
 #include "misc/htsmsg_json.h"
+#include "misc/misc.h"
 
 #include "github.h"
 #include "cfg.h"
@@ -319,10 +321,48 @@ restapi_builds_one(http_connection_t *hc, const char *remain,
 /**
  *
  */
+static int
+restapi_releases_list(http_connection_t *hc, const char *remain,
+                      void *opaque)
+{
+  char path[PATH_MAX];
+  const char *project = http_arg_get(&hc->hc_req_args, "project");
+
+  if(project == NULL)
+    return 400;
+
+  cfg_project(pc, project);
+  if(pc == NULL)
+    return 404;
+
+  const char *dir = cfg_get_str(pc, CFG("releaseTracks", "manifestDir"),
+                                NULL);
+  if(dir == NULL)
+    return 412;
+
+  snprintf(path, sizeof(path), "%s/all.json", dir);
+
+  int err;
+  char *json = readfile(path, &err, NULL);
+  if(json == NULL) {
+    trace(LOG_ERR, "Unable to read file %s -- %s", path, strerror(err));
+    return 404;
+  }
+
+  htsbuf_append_prealloc(&hc->hc_reply, json, strlen(json));
+  http_output_content(hc, "application/json");
+  return 0;
+}
+
+
+/**
+ *
+ */
 void
 restapi_init(void)
 {
-  http_path_add("/restapi/builds.json",  NULL, restapi_builds_list);
-  http_path_add("/restapi/builds.count", NULL, restapi_builds_count);
-  http_path_add("/restapi/builds",       NULL, restapi_builds_one);
+  http_path_add("/restapi/builds.json",   NULL, restapi_builds_list);
+  http_path_add("/restapi/builds.count",  NULL, restapi_builds_count);
+  http_path_add("/restapi/builds",        NULL, restapi_builds_one);
+  http_path_add("/restapi/releases.json", NULL, restapi_releases_list);
 }
