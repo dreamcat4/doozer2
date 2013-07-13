@@ -28,7 +28,8 @@ int git_repo_list_tags(project_t *p, struct ref_list *rl);
 
 void git_repo_free_refs(struct ref_list *rl);
 
-int git_describe(char *out, size_t outlen, project_t *p, const char *rev);
+int git_describe(char *out, size_t outlen, project_t *p, const char *rev,
+                 int with_hash);
 
 int git_changelog(struct change_queue *cq, project_t *p, const char *rev,
                   int offset, int count, int all, const char *target);

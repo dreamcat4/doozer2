@@ -11,7 +11,7 @@
 #include "project.h"
 #include "db.h"
 #include "restapi.h"
-
+#include "git.h"
 
 #define API_NO_DATA ((htsmsg_t *)-1)
 #define API_ERROR   NULL
@@ -358,6 +358,38 @@ restapi_releases_list(http_connection_t *hc, const char *remain,
 /**
  *
  */
+static int
+restapi_revisions_one(http_connection_t *hc, const char *remain,
+                      void *opaque)
+{
+  const char *project = http_arg_get(&hc->hc_req_args, "project");
+
+  if(project == NULL)
+    return 400;
+
+  project_t *p = project_get(project);
+  if(p == NULL)
+    return 404;
+
+  char ver[128];
+  if(git_describe(ver, sizeof(ver), p, remain, 0))
+    return 404;
+
+  htsmsg_t *m = htsmsg_create_map();
+  htsmsg_add_str(m, "version", ver);
+
+  char *json = htsmsg_json_serialize_to_str(m, 1);
+  htsmsg_destroy(m);
+
+  htsbuf_append_prealloc(&hc->hc_reply, json, strlen(json));
+  http_output_content(hc, "application/json");
+  return 0;
+}
+
+
+/**
+ *
+ */
 void
 restapi_init(void)
 {
@@ -365,4 +397,5 @@ restapi_init(void)
   http_path_add("/restapi/builds.count",  NULL, restapi_builds_count);
   http_path_add("/restapi/builds",        NULL, restapi_builds_one);
   http_path_add("/restapi/releases.json", NULL, restapi_releases_list);
+  http_path_add("/restapi/revisions",     NULL, restapi_revisions_one);
 }

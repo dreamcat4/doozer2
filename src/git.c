@@ -282,7 +282,8 @@ ref_from_oid(const struct ref_list *rl, const git_oid *oid)
  *
  */
 int
-git_describe(char *out, size_t outlen, project_t *p, const char *revision)
+git_describe(char *out, size_t outlen, project_t *p, const char *revision,
+             int with_hash)
 {
   git_oid start_oid, oid;
 
@@ -304,17 +305,20 @@ git_describe(char *out, size_t outlen, project_t *p, const char *revision)
   git_revwalk_sorting(walk, GIT_SORT_TOPOLOGICAL);
   int distance = 0;
   ref_t *r = NULL;
+  int retval = 1;
   while(!git_revwalk_next(&oid, walk)) {
+    retval = 0;
     if((r = ref_from_oid(&rl, &oid)) != NULL)
       break;
     distance++;
   }
 
-  version_snprint(out, outlen, r ? r->name : NULL, distance, &start_oid);
+  version_snprint(out, outlen, r ? r->name : NULL, distance,
+                  with_hash ? &start_oid : NULL);
   git_repo_free_refs(&rl);
   git_revwalk_free(walk);
 
-  return 0;
+  return retval;
 }
 
 
