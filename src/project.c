@@ -6,6 +6,8 @@
 #include <dirent.h>
 #include <errno.h>
 
+#include <curl/curl.h>
+
 #include "doozer.h"
 #include "project.h"
 #include "cfg.h"
@@ -23,6 +25,8 @@ static struct project_list projects;
 
 static pthread_mutex_t projects_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t projects_cond = PTHREAD_COND_INITIALIZER;
+
+static void project_notify_repo_update(project_t *p);
 
 
 /**
@@ -172,6 +176,9 @@ project_worker(void *aux)
       }
     }
 
+    if(pendings & PROJECT_JOB_NOTIFY_REPO_UPDATE)
+      project_notify_repo_update(p);
+
     if(pendings & PROJECT_JOB_CHECK_FOR_BUILDS)
       buildmaster_check_for_builds(p);
 
@@ -236,6 +243,44 @@ project_schedule_job(project_t *p, int mask)
 }
 
 
+
+
+static size_t
+dump_output(char *ptr, size_t size, size_t nmemb, void *userdata)
+{
+  return size * nmemb;
+}
+
+/**
+ *
+ */
+static void
+project_notify_repo_update(project_t *p)
+{
+  cfg_project(pc, p->p_id);
+  if(pc == NULL)
+    return;
+
+  for(int i = 0; ; i++) {
+    const char *url =
+      cfg_get_str(pc, CFG("repoUpdateNotifications", CFG_INDEX(i)), NULL);
+    if(url == NULL)
+      break;
+
+    plog(p, "notify", "Invoking %s", url);
+
+    CURL *curl = curl_easy_init();
+    if(curl != NULL) {
+      curl_easy_setopt(curl, CURLOPT_URL, url);
+      curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+      curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, &dump_output);
+      curl_easy_perform(curl);
+      curl_easy_cleanup(curl);
+    }
+  }
+}
+
+
 /**
  *
  */
@@ -246,3 +291,5 @@ projects_init(void)
   pthread_t tid;
   pthread_create(&tid, NULL, project_thread, NULL);
 }
+
+

@@ -23,11 +23,12 @@ PROG=${BUILDDIR}/doozer
 CFLAGS  += -Wall -Werror -Wwrite-strings -Wno-deprecated-declarations 
 CFLAGS  += -Wmissing-prototypes -std=gnu99
 CFLAGS  += $(shell mysql_config --cflags)
-
+CFLAGS  += $(shell pkg-config --cflags libcurl)
 
 LDFLAGS += -lpthread -lssl -lcrypto
 LDFLAGS += $(shell mysql_config --libs_r)
 LDFLAGS += -L${BUILDDIR}/libgit2/lib -lgit2
+LDFLAGS += $(shell pkg-config --libs libcurl)
 LDFLAGS += -lssl
 
 SRCS =  src/main.c \

@@ -125,7 +125,9 @@ http_github(http_connection_t *hc, const char *remain, void *opaque)
       plog(p, ctx, "%s", buf);
       plog(p, ctx, "%s", msg);
     }
-    project_schedule_job(p, PROJECT_JOB_UPDATE_REPO);
+    project_schedule_job(p,
+                         PROJECT_JOB_UPDATE_REPO |
+                         PROJECT_JOB_NOTIFY_REPO_UPDATE);
   }
   htsmsg_destroy(msg);
   return 200;

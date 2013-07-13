@@ -4,9 +4,11 @@
 #include "cfg.h"
 #include "doozer.h"
 
-#define PROJECT_JOB_UPDATE_REPO       0x1
-#define PROJECT_JOB_CHECK_FOR_BUILDS  0x2
-#define PROJECT_JOB_GENERATE_RELEASES 0x4
+#define PROJECT_JOB_UPDATE_REPO        0x1
+#define PROJECT_JOB_CHECK_FOR_BUILDS   0x2
+#define PROJECT_JOB_GENERATE_RELEASES  0x4
+#define PROJECT_JOB_NOTIFY_REPO_UPDATE 0x8
+
 /**
  *
  */
@@ -60,6 +62,11 @@ void project_schedule_job(project_t *p, int mask);
  *   release/publish/<arch>          - New relases published in JSON manifest
  *
  *   git/repo                        - Updates to repo
+ *   git/branch                      - Changes to branches
+ *
+ *   github                          - Github API entry
+ *
+ *   notify                          - Notifications
  */
 void plog(project_t *p, const char *context, const char *fmt, ...)
  __attribute__ ((format (printf, 3, 4)));
