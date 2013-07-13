@@ -71,6 +71,13 @@ send_artifact(http_connection_t *hc, const char *remain, void *opaque)
   const char *ct = content_type[0] ? content_type : "text/plain; charset=utf-8";
   const char *ce = content_encoding[0] ? content_encoding : NULL;
 
+  if(strncmp(ct, "text/plain", strlen("text/plain"))) {
+    char disp[256];
+    snprintf(disp, sizeof(disp), "attachment; filename=%s", name);
+    http_arg_set(&hc->hc_response_headers, "Content-Disposition",
+                 disp);
+  }
+
   if(!strcmp(storage, "embedded")) {
     // Easy one
     htsbuf_append(&hc->hc_reply, payload, strlen(payload));
