@@ -19,7 +19,7 @@ int dictcmp(const char *a, const char *b);
 
 int writefile(const char *path, void *bug, int size);
 
-char *readfile(const char *path, int *intptr);
+char *readfile(const char *path, int *intptr, time_t *ts);
 
 void url_split(char *proto, int proto_size,
                char *authorization, int authorization_size,

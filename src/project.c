@@ -136,7 +136,7 @@ project_init(const char *id, int forceinit)
     pthread_mutex_init(&p->p_repo_mutex, NULL);
     p->p_id = strdup(id);
     LIST_INSERT_HEAD(&projects, p, p_link);
-    trace(LOG_INFO, "Project %s initialized", p->p_id);
+    trace(LOG_INFO, "%s: Project initialized", p->p_id);
     forceinit = 1;
   }
 

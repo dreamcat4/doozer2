@@ -272,7 +272,7 @@ writefile(const char *path, void *buf, int size)
  *
  */
 char *
-readfile(const char *path, int *errptr)
+readfile(const char *path, int *errptr, time_t *tsp)
 {
   struct stat st;
 
@@ -289,6 +289,9 @@ readfile(const char *path, int *errptr)
     close(fd);
     return NULL;
   }
+
+  if(tsp != NULL)
+    *tsp = st.st_mtime;
 
   char *mem = malloc(st.st_size + 1);
   mem[st.st_size] = 0;

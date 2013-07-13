@@ -16,6 +16,7 @@ typedef struct pconf {
   char *pc_id;
   int pc_mark;
   htsmsg_t *pc_msg;
+  time_t pc_mtime;  // mtime of last read conf
 } pconf_t;
 
 pthread_mutex_t cfg_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -68,7 +69,7 @@ cfg_load(const char *filename)
 
   trace(LOG_NOTICE, "About to load config form %s", filename);
 
-  char *cfgtxt = readfile(filename, &err);
+  char *cfgtxt = readfile(filename, &err, NULL);
   if(cfgtxt == NULL) {
     trace(LOG_ERR, "Unable to read file %s -- %s", filename, strerror(err));
     trace(LOG_ERR, "Config not updated");
@@ -116,7 +117,8 @@ project_load_conf(char *fname, const char *path)
   snprintf(buf, sizeof(buf), "%s/%s.json", path, fname);
 
   int err;
-  char *json = readfile(buf, &err);
+  time_t mtime;
+  char *json = readfile(buf, &err, &mtime);
   if(json == NULL) {
     trace(LOG_ERR, "Unable to read file %s -- %s", buf, strerror(err));
     trace(LOG_ERR, "Config for project '%s' not updated", fname);
@@ -139,18 +141,26 @@ project_load_conf(char *fname, const char *path)
       break;
 
   if(pc == NULL) {
-    pc = malloc(sizeof(pconf_t));
+    pc = calloc(1, sizeof(pconf_t));
     LIST_INSERT_HEAD(&pconfs, pc, pc_link);
     pc->pc_id = strdup(fname);
-    pc->pc_mark = 0;
   } else {
+    pc->pc_mark = 0;
+
+    if(pc->pc_mtime == mtime)
+      return;
+
     htsmsg_release(pc->pc_msg);
   }
 
   pc->pc_msg = m;
   htsmsg_retain(m);
 
-  project_init(fname, 1);
+  project_init(fname, pc->pc_mtime != mtime);
+
+  pc->pc_mtime = mtime;
+
+  trace(LOG_INFO, "%s: Config loaded", fname);
 }
 
 
@@ -160,7 +170,7 @@ project_load_conf(char *fname, const char *path)
 void
 projects_reload(void)
 {
-  pconf_t *pc;
+  pconf_t *pc, *next;
   cfg_root(root);
 
   const char *path = cfg_get_str(root, CFG("projectConfigDir"), "projects");
@@ -186,6 +196,20 @@ projects_reload(void)
     free(namelist[n]);
   }
   free(namelist);
+
+
+  for(pc = LIST_FIRST(&pconfs); pc != NULL; pc = next) {
+    next = LIST_NEXT(pc, pc_link);
+    if(!pc->pc_mark)
+      continue;
+
+    trace(LOG_INFO, "%s: Config unloaded", pc->pc_id);
+
+    LIST_REMOVE(pc, pc_link);
+    free(pc->pc_id);
+    htsmsg_release(pc->pc_msg);
+    free(pc);
+  }
 }
 
 
