@@ -147,9 +147,8 @@ artifact_to_htsmsg(MYSQL_STMT *q, const char *artifact_prefix)
  *
  */
 static int
-restapi_builds(http_connection_t *hc, int qtype)
+do_builds(http_connection_t *hc, const char *project, int qtype)
 {
-  const char *project = http_arg_get(&hc->hc_req_args, "project");
   int offset      = http_arg_get_int(&hc->hc_req_args, "offset", 0);
   int limit       = http_arg_get_int(&hc->hc_req_args, "limit", 10);
   char query[1024];
@@ -237,30 +236,7 @@ restapi_builds(http_connection_t *hc, int qtype)
  *
  */
 static int
-restapi_builds_count(http_connection_t *hc, const char *remain,
-                     void *opaque)
-{
-  return restapi_builds(hc, 0);
-}
-
-
-/**
- *
- */
-static int
-restapi_builds_list(http_connection_t *hc, const char *remain,
-                    void *opaque)
-{
-  return restapi_builds(hc, 1);
-}
-
-
-/**
- *
- */
-static int
-restapi_builds_one(http_connection_t *hc, const char *remain,
-                   void *opaque)
+do_builds_one(http_connection_t *hc, const char *project, const char *remain)
 {
   cfg_root(root);
   const char *baseurl = cfg_get_str(root, CFG("artifactPrefix"), NULL);
@@ -277,9 +253,9 @@ restapi_builds_one(http_connection_t *hc, const char *remain,
   htsmsg_t *m;
   {
     scoped_db_stmt(bq, "SELECT "BUILD_MSG_FIELDS" "
-                   " FROM build WHERE id = ?");
+                   " FROM build WHERE id = ? AND project =?");
 
-    if(bq == NULL || db_stmt_exec(bq, "i", id))
+    if(bq == NULL || db_stmt_exec(bq, "is", id, project))
       return 500;
 
     m = build_to_htsmsg(bq);
@@ -322,14 +298,10 @@ restapi_builds_one(http_connection_t *hc, const char *remain,
  *
  */
 static int
-restapi_releases_list(http_connection_t *hc, const char *remain,
-                      void *opaque)
+do_releases_list(http_connection_t *hc, const char *project,
+                 const char *remain)
 {
   char path[PATH_MAX];
-  const char *project = http_arg_get(&hc->hc_req_args, "project");
-
-  if(project == NULL)
-    return 400;
 
   cfg_project(pc, project);
   if(pc == NULL)
@@ -359,24 +331,57 @@ restapi_releases_list(http_connection_t *hc, const char *remain,
  *
  */
 static int
-restapi_revisions_one(http_connection_t *hc, const char *remain,
-                      void *opaque)
+do_revisions_one(http_connection_t *hc, const char *project,
+                 const char *remain)
 {
-  const char *project = http_arg_get(&hc->hc_req_args, "project");
-
-  if(project == NULL)
+  if(remain == NULL)
     return 400;
 
   project_t *p = project_get(project);
   if(p == NULL)
     return 404;
 
+  conn_t *c = db_get_conn();
+  if(c == NULL)
+    return 500;
+
+  char *revision = mystrdupa(remain);
+  char *x = strchr(revision, '.');
+  if(x)
+    *x = 0;
+
   char ver[128];
   if(git_describe(ver, sizeof(ver), p, remain, 0))
     return 404;
 
+
+  char query[1024];
+
+  snprintf(query, sizeof(query),
+           "SELECT "BUILD_MSG_FIELDS" "
+           "FROM build "
+           "WHERE revision = ? AND project = ?");
+
+  scoped_db_stmt(q, query);
+
+  if(q == NULL || db_stmt_exec(q, "ss", revision, project))
+    return 500;
+
+  htsmsg_t *list = htsmsg_create_list();
+
+  while(1) {
+    htsmsg_t *m = build_to_htsmsg(q);
+    if(m == NULL)
+      break;
+    if(m == API_NO_DATA)
+       break;
+    htsmsg_add_msg(list, NULL, m);
+  }
+
   htsmsg_t *m = htsmsg_create_map();
+  htsmsg_add_str(m, "id", revision);
   htsmsg_add_str(m, "version", ver);
+  htsmsg_add_msg(m, "builds", list);
 
   char *json = htsmsg_json_serialize_to_str(m, 1);
   htsmsg_destroy(m);
@@ -387,15 +392,43 @@ restapi_revisions_one(http_connection_t *hc, const char *remain,
 }
 
 
+
+/**
+ *
+ */
+static int
+restapi_projects(http_connection_t *hc, const char *remain,
+                 void *opaque)
+{
+  char *path = mystrdupa(remain);
+  const char *r;
+  const char *project = path;
+  char *x = strchr(path, '/');
+  if(x == NULL)
+    return 404;
+
+  *x++ = 0;
+
+  if((r = mystrbegins(x, "revisions/")) != NULL)
+    return do_revisions_one(hc, project, r);
+  if((r = mystrbegins(x, "builds/")) != NULL)
+    return do_builds_one(hc, project, r);
+  if(!strcmp(x, "builds.count"))
+    return do_builds(hc, project, 0);
+  if(!strcmp(x, "builds.json"))
+    return do_builds(hc, project, 1);
+  if(!strcmp(x, "releases.json"))
+    return do_releases_list(hc, project, r);
+
+  return 404;
+}
+
+
 /**
  *
  */
 void
 restapi_init(void)
 {
-  http_path_add("/restapi/builds.json",   NULL, restapi_builds_list);
-  http_path_add("/restapi/builds.count",  NULL, restapi_builds_count);
-  http_path_add("/restapi/builds",        NULL, restapi_builds_one);
-  http_path_add("/restapi/releases.json", NULL, restapi_releases_list);
-  http_path_add("/restapi/revisions",     NULL, restapi_revisions_one);
+  http_path_add("/projects",              NULL, restapi_projects);
 }
