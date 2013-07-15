@@ -227,7 +227,7 @@ generate_update_tracks(project_t *p, struct build_queue *builds,
         continue;
       }
       plog(p, logctx,
-           "ReleaesTrack: %s Target %s: Using branch '%s' for pattern '%s'",
+           "ReleaseTrack: %s Target %s: Using branch '%s' for pattern '%s'",
            track, t->t_target, b->b_branch, branchpattern);
 
 
