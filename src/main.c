@@ -176,8 +176,10 @@ main(int argc, char **argv)
 
   srand48(getpid() ^ time(NULL));
 
-  if(cfg_load(cfgfile))
+  if(cfg_load(cfgfile)) {
+    fprintf(stderr, "Unable to load config (check -c option). Giving up\n");
     exit(1);
+  }
 
   git_threads_init();
 
