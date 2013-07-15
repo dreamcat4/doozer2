@@ -270,7 +270,7 @@ http_getjob(http_connection_t *hc, const char *remain, void *opaque)
                                         agent, "secret"), NULL);
 
   int longpolltimeout =
-    cfg_get_int(root, CFG("webservice", "longpollTimeout"), 60);
+    cfg_get_int(root, CFG("http", "longpollTimeout"), 60);
 
   if(s == NULL) {
     trace(LOG_ERR, "Agent '%s' not configured", agent);

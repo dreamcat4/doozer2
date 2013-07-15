@@ -30,7 +30,8 @@ typedef void (tcp_server_callback_t)(int fd, void *opaque,
 				     struct sockaddr_in *peer,
 				     struct sockaddr_in *self);
 
-void *tcp_server_create(int port, tcp_server_callback_t *start, void *opaque);
+void *tcp_server_create(int port, const char *bindaddr,
+                        tcp_server_callback_t *start, void *opaque);
 
 int tcp_read(int fd, void *buf, size_t len);
 

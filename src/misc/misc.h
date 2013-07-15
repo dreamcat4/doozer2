@@ -27,3 +27,5 @@ void url_split(char *proto, int proto_size,
                int *port_ptr,
                char *path, int path_size,
                const char *url);
+
+int makedirs(const char *path);

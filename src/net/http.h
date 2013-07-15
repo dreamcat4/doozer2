@@ -139,7 +139,7 @@ http_path_t *http_path_add(const char *path, void *opaque,
 
 
 
-void http_server_init(int port);
+int http_server_init(int port, const char *bindaddr);
 
 int http_access_verify(http_connection_t *hc);
 

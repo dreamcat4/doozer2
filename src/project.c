@@ -92,7 +92,7 @@ plog(project_t *p, const char *ctx, const char *fmt, ...)
     // just skip over 'len' bytes (which is length of prefix)
     const char *msg = prefix_project ? buf : buf + len;
 
-    if(!strcmp(proto, "syslog")) {
+    if(!strcmp(proto, "syslog") && !did_syslog) {
       trace(LOG_INFO, "%s", msg);
       did_syslog = 1;
     } else if(!strcmp(proto, "irc")) {

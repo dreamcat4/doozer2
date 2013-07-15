@@ -739,7 +739,7 @@ http_serve_requests(http_connection_t *hc, htsbuf_queue_t *spill)
       return;
     }
 
-    printf("HTTP: %s\n", cmdline);
+    //    printf("HTTP: %s\n", cmdline);
 
     if((n = http_tokenize(cmdline, argv, 3, -1)) != 3) {
       return;
@@ -760,7 +760,7 @@ http_serve_requests(http_connection_t *hc, htsbuf_queue_t *spill)
 	return;
       }
 
-      printf("HTTP: %s\n", hdrline);
+      //      printf("HTTP: %s\n", hdrline);
 
       if(hdrline[0] == 0) {
 	break; /* header complete */
@@ -839,8 +839,11 @@ http_serve(int fd, void *opaque, struct sockaddr_in *peer,
 /**
  *  Fire up HTTP server
  */
-void
-http_server_init(int port)
+int
+http_server_init(int port, const char *bindaddr)
 {
-  http_server = tcp_server_create(port, http_serve, NULL);
+  http_server = tcp_server_create(port, bindaddr, http_serve, NULL);
+  if(http_server == NULL)
+    return errno;
+  return 0;
 }

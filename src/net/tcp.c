@@ -430,7 +430,8 @@ tcp_server_loop(void *aux)
  *
  */
 void *
-tcp_server_create(int port, tcp_server_callback_t *start, void *opaque)
+tcp_server_create(int port, const char *bindaddr,
+                  tcp_server_callback_t *start, void *opaque)
 {
   int fd, x;
   struct epoll_event e;
@@ -447,11 +448,16 @@ tcp_server_create(int port, tcp_server_callback_t *start, void *opaque)
   memset(&s, 0, sizeof(s));
   s.sin_family = AF_INET;
   s.sin_port = htons(port);
-  
+  if(bindaddr != NULL)
+    s.sin_addr.s_addr = inet_addr(bindaddr);
+
   x = bind(fd, (struct sockaddr *)&s, sizeof(s));
   if(x < 0) {
-    trace(LOG_ERR, "Unable to bind port %d -- %s", port, strerror(errno));
+    int x = errno;
+    trace(LOG_ERR, "Unable to bind %s:%d -- %s", 
+          bindaddr ?: "0.0.0.0", port, strerror(errno));
     close(fd);
+    errno = x;
     return NULL;
   }
 
