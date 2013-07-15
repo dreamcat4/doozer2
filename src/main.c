@@ -92,21 +92,10 @@ void
 trace(int level, const char *fmt, ...)
 {
   va_list ap;
-
   va_start(ap, fmt);
-
-  if(dosyslog) {
-    va_list aq;
-    va_copy(aq, ap);
-    vsyslog(level, fmt, aq);
-    va_end(aq);
-  }
-
-  vfprintf(stderr, fmt, ap);
-  fputc('\n', stderr);
+  tracev(level, fmt, ap);
   va_end(ap);
 }
-
 
 
 /**
@@ -136,6 +125,29 @@ http_init(void)
 }
 
 
+
+/**
+ *
+ */
+static void
+enable_syslog(const char *facility)
+{
+  int f;
+  const char *x;
+  if(!strcmp(facility, "daemon"))
+    f = LOG_DAEMON;
+  else if((x = mystrbegins(facility, "local")) != NULL)
+    f = LOG_LOCAL0 + atoi(x);
+  else {
+    fprintf(stderr, "Invalid syslog config -- %s\n", facility);
+    exit(1);
+  }
+
+  dosyslog = 1;
+  openlog("doozer", LOG_PID, f);
+
+}
+
 /**
  *
  */
@@ -148,10 +160,13 @@ main(int argc, char **argv)
 
   signal(SIGPIPE, handle_sigpipe);
 
-  while((c = getopt(argc, argv, "c:")) != -1) {
+  while((c = getopt(argc, argv, "c:s:")) != -1) {
     switch(c) {
     case 'c':
       cfgfile = optarg;
+      break;
+    case 's':
+      enable_syslog(optarg);
       break;
     }
   }
