@@ -15,6 +15,8 @@
 #  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+prefix ?= /usr/local
+
 BUILDDIR = ${CURDIR}/build
 
 PROG=${BUILDDIR}/doozer
@@ -87,6 +89,12 @@ clean:
 
 distclean: clean
 	rm -rf build.*
+
+install: ${PROG}
+	install -D ${PROG} "${prefix}/bin/doozer"
+
+uninstall:
+	rm -f "${prefix}/bin/doozer"
 
 # Include dependency files if they exist.
 -include $(DEPS)
