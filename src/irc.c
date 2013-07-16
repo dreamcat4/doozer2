@@ -111,6 +111,10 @@ typedef struct irc_client {
                                         If this is not set we should not try
                                         to JOIN channels, PRIVMSG targets, etc
                                      */
+  int ic_disconnect_sleep;          /* Time to sleep before reconnecting
+                                       Reset to 1 when we manage to register
+                                    */
+
   struct irc_out_msg_queue ic_cmdq;
   int64_t ic_cmdq_nextsend;
   int ic_cmdq_mintime;
@@ -393,6 +397,7 @@ irc_recv_line(irc_client_t *ic, char *p)
   case 376: // End of MOTD
   case 422: // No MOTD
     ic->ic_registered = 1;
+    ic->ic_disconnect_sleep = 1;
     irc_check_channels(ic);
     return 0;
 
@@ -585,6 +590,7 @@ irc_thread(void *aux)
   int run = 1;
 
   ic->ic_fd = -1;
+  ic->ic_disconnect_sleep = 1;
   while(run) {
 
     if(ic->ic_fd != -1)
@@ -747,8 +753,13 @@ irc_thread(void *aux)
     htsbuf_queue_flush(&recvq);
     close(ic->ic_fd);
     ic->ic_fd = -1;
+    if(!run)
+      break;
     irc_client_cleanup(ic);
-    sleep(2);
+    trace(LOG_INFO, "IRC: %s: Reconnect in %d seconds",
+          ic->ic_server, ic->ic_disconnect_sleep);
+    sleep(ic->ic_disconnect_sleep);
+    ic->ic_disconnect_sleep = MIN(ic->ic_disconnect_sleep * 2, 120);
   }
 
   if(ic->ic_fd != -1)
