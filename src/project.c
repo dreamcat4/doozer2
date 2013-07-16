@@ -59,14 +59,22 @@ plog(project_t *p, const char *ctx, const char *fmt, ...)
 
     int match = 0;
 
-    for(int j = 0; ; i++) {
+    for(int j = 0; ; j++) {
       const char *context =
         cfg_get_str(pc, CFG("log", CFG_INDEX(i), "context", CFG_INDEX(j)), NULL);
 
       if(context == NULL)
         break;
 
+      int inverse = 0;
+      if(*context == '!') {
+	inverse = 1;
+	context++;
+      }
+
       if(!fnmatch(context, ctx, 0)) {
+	if(inverse)
+	  break;
         match = 1;
         break;
       }
