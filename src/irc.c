@@ -129,7 +129,7 @@ typedef struct irc_client {
 
   char *ic_wanted_nick;
   struct channel_list ic_channels;
-
+  int ic_dotrace;
 
 } irc_client_t;
 
@@ -357,7 +357,8 @@ irc_recv_line(irc_client_t *ic, char *p)
 
     code = str2val(command, IRC_cmdtab);
     if(code == -1) {
-      trace(LOG_DEBUG, "IRC: %s: Unknown command %s", ic->ic_server, command);
+      if(ic->ic_dotrace)
+	trace(LOG_DEBUG, "IRC: %s: Unknown command %s", ic->ic_server, command);
       return 0;
     }
   }
@@ -455,7 +456,8 @@ irc_parse_input(irc_client_t *ic, htsbuf_queue_t *q)
     htsbuf_drop(q, 2); // Drop \r\n
 
     line[ll] = 0;
-    trace(LOG_DEBUG, "IRC: %s: RECV: %s", ic->ic_server, line);
+    if(ic->ic_dotrace)
+      trace(LOG_DEBUG, "IRC: %s: RECV: %s", ic->ic_server, line);
 
     if(irc_recv_line(ic, line))
       return 1;
@@ -504,6 +506,10 @@ refresh_cfg(irc_client_t *ic)
     trace(LOG_INFO, "IRC: %s: Switching nick to %s", ic->ic_server, nick);
     irc_send(ic, "NICK %s", ic->ic_wanted_nick);
   }
+
+  ic->ic_dotrace =
+    cfg_get_int(root, CFG("ircbot", "trace"), 0) ||
+    cfg_get_int(root, CFG("ircbot", ic->ic_server, "trace"), 0);
 }
 
 
@@ -544,8 +550,9 @@ iom_write(irc_client_t *ic, struct irc_out_msg_queue *q)
   int r = write(ic->ic_fd, iom->iom_data + iom->iom_offset, len);
 
   if(r == len) {
-    trace(LOG_DEBUG, "IRC: %s: SEND: %.*s", ic->ic_server,
-          iom->iom_length - 2, iom->iom_data);
+    if(ic->ic_dotrace)
+      trace(LOG_DEBUG, "IRC: %s: SEND: %.*s", ic->ic_server,
+	    iom->iom_length - 2, iom->iom_data);
     TAILQ_REMOVE(q, iom, iom_link);
     free(iom);
     return 0;
