@@ -101,5 +101,5 @@ uninstall:
 
 ${BUILDDIR}/libgit2/include/git2.h:
 	mkdir -p ${BUILDDIR}/libgit2/build
-	cd ${BUILDDIR}/libgit2/build && cmake ${CURDIR}/libgit2 -DCMAKE_INSTALL_PREFIX=${BUILDDIR}/libgit2 -DBUILD_SHARED_LIBS=OFF
+	cd ${BUILDDIR}/libgit2/build && cmake ${CURDIR}/libgit2 -DCMAKE_INSTALL_PREFIX=${BUILDDIR}/libgit2 -DBUILD_SHARED_LIBS=OFF -DTHREADSAFE=ON
 	cd ${BUILDDIR}/libgit2/build && cmake --build . --target install
