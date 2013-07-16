@@ -13,33 +13,50 @@
 static int
 ensure_repo(project_t *p)
 {
-  char path[512];
-  cfg_root(root);
+  const char *repo;
 
   if(p->p_repo != NULL)
     return 0;
 
-  const char *repos = cfg_get_str(root, CFG("repos"),
-                                  "/var/tmp/doozer-git-repos");
+  cfg_project(pc, p->p_id);
+  if(pc == NULL) {
+    plog(p, "git/repo", "Unable to open GIT repo -- No project config");
+    return DOOZER_ERROR_PERMANENT;
+  }
 
-  snprintf(path, sizeof(path), "%s/%s", repos, p->p_id);
+  repo = cfg_get_str(pc, CFG("repo"), NULL);
+
+  if(repo == NULL) {
+    cfg_root(root);
+
+    char path[512];
+    if(p->p_repo != NULL)
+      return 0;
+
+    const char *repos = cfg_get_str(root, CFG("repos"),
+				    "/var/tmp/doozer-git-repos");
+
+    snprintf(path, sizeof(path), "%s/%s", repos, p->p_id);
+
+    repo = path;
+  }
 
   int r;
-  if((r = git_repository_open_bare(&p->p_repo, path)) < 0) {
+  if((r = git_repository_open_bare(&p->p_repo, repo)) < 0) {
 
     if(r == GIT_ENOTFOUND) {
       plog(p, "git/repo",
-           "Creating new repository at %s", path);
-      r = git_repository_init(&p->p_repo, path, 1);
+           "Creating new repository at %s", repo);
+      r = git_repository_init(&p->p_repo, repo, 1);
     }
   }
 
   if(r < 0) {
     plog(p, "git/repo", "Unable to open GIT repo %s -- %s",
-         path, giterr());
+         repo, giterr());
     return DOOZER_ERROR_TRANSIENT;
   }
-  plog(p, "git/repo", "Git repo at %s opened", path);
+  plog(p, "git/repo", "Git repo at %s opened", repo);
   return 0;
 }
 
