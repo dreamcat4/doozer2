@@ -35,7 +35,7 @@ static void project_notify_repo_update(project_t *p);
 void
 plog(project_t *p, const char *ctx, const char *fmt, ...)
 {
-  char buf[2048];
+  char buf_color[2048];
 
   cfg_project(pc, p->p_id);
   if(pc == NULL)
@@ -46,9 +46,12 @@ plog(project_t *p, const char *ctx, const char *fmt, ...)
   va_list ap;
 
   va_start(ap, fmt);
-  int len = snprintf(buf, sizeof(buf), "%s: ", p->p_id);
-  vsnprintf(buf + len, sizeof(buf) - len, fmt, ap);
+  int len = snprintf(buf_color, sizeof(buf_color), "%s: ", p->p_id);
+  vsnprintf(buf_color + len, sizeof(buf_color) - len, fmt, ap);
   va_end(ap);
+
+  char *buf_nocolor = mystrdupa(buf_color);
+  decolorize(buf_nocolor);
 
   for(int i = 0; ; i++) {
 
@@ -93,24 +96,19 @@ plog(project_t *p, const char *ctx, const char *fmt, ...)
               path, sizeof(path),
               target);
 
-    int prefix_project =
-      cfg_get_int(pc, CFG("log", CFG_INDEX(i), "prefixProject"), 1);
-
-    // If we don't want to include project as prefix in message,
-    // just skip over 'len' bytes (which is length of prefix)
-    const char *msg = prefix_project ? buf : buf + len;
+    int pp = cfg_get_int(pc, CFG("log", CFG_INDEX(i), "prefixProject"), 1);
 
     if(!strcmp(proto, "syslog") && !did_syslog) {
-      trace(LOG_INFO, "%s", msg);
+      trace(LOG_INFO, "%s", pp ? buf_nocolor : buf_nocolor + len);
       did_syslog = 1;
     } else if(!strcmp(proto, "irc")) {
       path[0] = '#';  // Replace '/' with '#'
-      irc_msg_channel(hostname, path, msg);
+      irc_msg_channel(hostname, path, pp ? buf_color : buf_color + len);
     }
   }
 
   if(!did_syslog && isatty(2))
-    fprintf(stderr, "%s\n", buf);
+    fprintf(stderr, "%s\n", buf_nocolor);
 }
 
 

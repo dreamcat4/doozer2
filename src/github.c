@@ -101,26 +101,27 @@ http_github(http_connection_t *hc, const char *remain, void *opaque)
       char ctx[128];
       snprintf(ctx, sizeof(ctx), "changes/%s", ref);
 
-      len = snprintf(buf, sizeof(buf), "Commit in '%s' by %s [",
+      len = snprintf(buf, sizeof(buf),
+                     "Commit in '"COLOR_BLUE"%s"COLOR_OFF"' by "COLOR_PURPLE"%s"COLOR_OFF" [",
                      ref, author ?: "???");
 
       if(added)
         len += snprintf(buf + len, sizeof(buf) - len,
-                        "%d file%s added",
+                        COLOR_GREEN "%d file%s added",
                         added, added == 1 ? "" : "s");
 
       if(modified)
         len += snprintf(buf + len, sizeof(buf) - len,
-                        "%s%d file%s modified",
+                        COLOR_YELLOW "%s%d file%s modified",
                         added ? ", "  : "",
                         modified, modified == 1 ? "" : "s");
 
       if(removed)
         len += snprintf(buf + len, sizeof(buf) - len,
-                        "%s%d file%s removed",
+                        COLOR_RED "%s%d file%s removed",
                         added || modified ? ", "  : "",
                         removed, removed == 1 ? "" : "s");
-      snprintf(buf + len, sizeof(buf) - len, "]");
+      snprintf(buf + len, sizeof(buf) - len, COLOR_OFF"]");
 
       plog(p, ctx, "%s", buf);
       plog(p, ctx, "%s", msg);

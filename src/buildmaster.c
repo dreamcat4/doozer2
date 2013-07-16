@@ -622,11 +622,11 @@ http_report(http_connection_t *hc, const char *remain, void *opaque)
   } else if(!strcmp(newstatus, "failed")) {
     db_stmt_exec(c->build_finished, "ssi", "failed", msg, jobid);
     plog(p, "build/finalstatus",
-         "Build #%d: Failed: %s", jobid, msg);
+         COLOR_RED "Build #%d: Failed: %s", jobid, msg);
   } else if(!strcmp(newstatus, "done")) {
     db_stmt_exec(c->build_finished, "ssi", "done", NULL, jobid);
     plog(p, "build/finalstatus",
-         "Build #%d: Completed: %s", jobid, newstatus);
+         COLOR_GREEN "Build #%d: Completed: %s", jobid, newstatus);
     project_schedule_job(project_get(project), PROJECT_JOB_GENERATE_RELEASES);
   } else {
     return 400;
@@ -706,7 +706,7 @@ buildmaster_check_expired_builds(conn_t *c)
     if(attempts >= maxattempts) {
       newstatus = "too_many_attempts";
       plog(p, "build/finalstatus",
-            "Build #%d too many build attempts failed. Giving up",
+           COLOR_RED "Build #%d too many build attempts failed. Giving up",
             id);
     } else {
       newstatus = "pending";

@@ -13,6 +13,16 @@
 #define DOOZER_ERROR_NO_DATA   -4
 #define DOOZER_ERROR_INVALID_ARGS -5
 
+#define COLOR_OFF    "\003"
+#define COLOR_BLUE   "\0032"
+#define COLOR_GREEN  "\0033"
+#define COLOR_RED    "\0034"
+#define COLOR_BROWN  "\0035"
+#define COLOR_PURPLE "\0036"
+#define COLOR_ORANGE "\0037"
+#define COLOR_YELLOW "\0038"
+
+void decolorize(char *str);
 void trace(int level, const char *fmt, ...) __attribute__ ((format (printf, 2, 3)));
 void tracev(int level, const char *fmt, va_list ap);
 

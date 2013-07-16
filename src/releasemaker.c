@@ -313,8 +313,8 @@ generate_update_tracks(project_t *p, struct build_queue *builds,
         snprintf(logctx, sizeof(logctx), "release/publish/%s",
                  b->b_target);
         plog(p, logctx,
-             "New release '%s' available for %s",
-             b->b_version, b->b_target);
+             COLOR_GREEN "New %s release '%s' available for %s",
+             tracktitle, b->b_version, b->b_target);
       }
       free(json);
 

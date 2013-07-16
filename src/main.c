@@ -91,9 +91,11 @@ tracev(int level, const char *fmt, va_list ap)
 void
 trace(int level, const char *fmt, ...)
 {
+  char *s = mystrdupa(fmt);
+  decolorize(s);
   va_list ap;
   va_start(ap, fmt);
-  tracev(level, fmt, ap);
+  tracev(level, s, ap);
   va_end(ap);
 }
 
@@ -234,4 +236,26 @@ void
 mutex_unlock_ptr(pthread_mutex_t **p)
 {
   pthread_mutex_unlock(*p);
+}
+
+
+/**
+ *
+ */
+void
+decolorize(char *s)
+{
+  char *d = s;
+  while(*s) {
+    if(*s == '\003') {
+      s++;
+      if(*s == '1' && s[1] >= '0' && s[1] <= '5')
+        s+=2;
+      else if(*s >= '0' && *s <= '9')
+        s++;
+      continue;
+    }
+    *d++ = *s++;
+  }
+  *d = 0;
 }
