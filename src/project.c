@@ -181,6 +181,7 @@ project_worker(void *aux)
     if(pendings & PROJECT_JOB_UPDATE_REPO) {
       if(!git_repo_sync(p)) {
         pendings |= PROJECT_JOB_CHECK_FOR_BUILDS;
+        pendings |= PROJECT_JOB_NOTIFY_REPO_UPDATE;
       }
     }
 
