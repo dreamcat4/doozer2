@@ -10,6 +10,7 @@
 #include <errno.h>
 
 #include "net/http.h"
+#include "misc/misc.h"
 
 #include "buildmaster.h"
 #include "db.h"
@@ -475,7 +476,7 @@ http_artifact(http_connection_t *hc, const char *remain, void *opaque)
             jobid, project);
       return 500;
     }
-    mkdir(basepath, 0770);
+    makedirs(basepath);
     snprintf(path, sizeof(path), "%s/%d", basepath, jobid);
     mkdir(path, 0770);
     snprintf(path, sizeof(path), "%s/%d/%s", basepath, jobid, name);

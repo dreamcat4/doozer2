@@ -176,6 +176,8 @@ generate_update_tracks(project_t *p, struct build_queue *builds,
     return;
   }
 
+  makedirs(outpath);
+
   htsmsg_t *outtracks = htsmsg_create_list();
 
   for(int i = 0; ; i++) {
