@@ -13,14 +13,14 @@
 #define DOOZER_ERROR_NO_DATA   -4
 #define DOOZER_ERROR_INVALID_ARGS -5
 
-#define COLOR_OFF    "\003"
-#define COLOR_BLUE   "\0032"
-#define COLOR_GREEN  "\0033"
-#define COLOR_RED    "\0034"
-#define COLOR_BROWN  "\0035"
-#define COLOR_PURPLE "\0036"
-#define COLOR_ORANGE "\0037"
-#define COLOR_YELLOW "\0038"
+#define COLOR_OFF    "\017"
+#define COLOR_BLUE   "\00302"
+#define COLOR_GREEN  "\00303"
+#define COLOR_RED    "\00304"
+#define COLOR_BROWN  "\00305"
+#define COLOR_PURPLE "\00306"
+#define COLOR_ORANGE "\00307"
+#define COLOR_YELLOW "\00308"
 
 void decolorize(char *str);
 void trace(int level, const char *fmt, ...) __attribute__ ((format (printf, 2, 3)));
