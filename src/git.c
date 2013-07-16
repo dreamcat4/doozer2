@@ -58,10 +58,8 @@ update_cb(const char *refname, const git_oid *a, const git_oid *b, void *data)
   b_str[GIT_OID_HEXSZ] = '\0';
 
   if(git_oid_iszero(a)) {
-#if 1 // this can be too much
     plog(p, "git/branch",
          "GIT: [new]     %.20s %s", b_str, refname);
-#endif
   } else {
     git_oid_fmt(a_str, a);
     a_str[GIT_OID_HEXSZ] = '\0';
