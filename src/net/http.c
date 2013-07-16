@@ -33,6 +33,7 @@
 
 #include "tcp.h"
 #include "http.h"
+#include "cfg.h"
 
 static void *http_server;
 
@@ -730,16 +731,21 @@ http_serve_requests(http_connection_t *hc, htsbuf_queue_t *spill)
   char *argv[3], *c;
   int n;
 
+
   htsbuf_queue_init(&hc->hc_reply, 0);
 
   do {
+    cfg_root(cr);
+    int tracehttp = cfg_get_int(cr, CFG("http", "trace"), 0);
+
     hc->hc_no_output  = 0;
 
     if(tcp_read_line(hc->hc_fd, cmdline, sizeof(cmdline), spill) < 0) {
       return;
     }
 
-    //    printf("HTTP: %s\n", cmdline);
+    if(tracehttp)
+      trace(LOG_DEBUG, "HTTP: %s", cmdline);
 
     if((n = http_tokenize(cmdline, argv, 3, -1)) != 3) {
       return;
@@ -760,7 +766,8 @@ http_serve_requests(http_connection_t *hc, htsbuf_queue_t *spill)
 	return;
       }
 
-      //      printf("HTTP: %s\n", hdrline);
+      if(tracehttp)
+	trace(LOG_DEBUG, "HTTP: %s", hdrline);
 
       if(hdrline[0] == 0) {
 	break; /* header complete */
