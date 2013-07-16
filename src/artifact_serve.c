@@ -211,6 +211,13 @@ send_artifact(http_connection_t *hc, const char *remain, void *opaque)
     const char *secret = cfg_get_str(p, CFG("s3", "secret"), NULL);
     const char *awsid  = cfg_get_str(p, CFG("s3", "awsid"),  NULL);
 
+
+    if(bucket == NULL || secret == NULL || awsid == NULL) {
+      trace(LOG_INFO,
+	    "Missing S3 config for project '%s'. Unable to serve files", project);
+      return 412;
+    }
+
     snprintf(sigstr, sizeof(sigstr), "GET\n\n\n%ld\n/%s/%s",
              expire, bucket, payload);
     HMAC(EVP_sha1(), secret, strlen(secret), (void *)sigstr,
