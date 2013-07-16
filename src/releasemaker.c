@@ -181,12 +181,14 @@ generate_update_tracks(project_t *p, struct build_queue *builds,
   htsmsg_t *outtracks = htsmsg_create_list();
 
   for(int i = 0; ; i++) {
-    const char *track  =
+    const char *trackid =
       cfg_get_str(tracks, CFG(CFG_INDEX(i), "name"),   NULL);
+    const char *tracktitle  =
+      cfg_get_str(tracks, CFG(CFG_INDEX(i), "title"),   NULL);
     const char *branchpattern =
       cfg_get_str(tracks, CFG(CFG_INDEX(i), "branch"), NULL);
 
-    if(track == NULL || branchpattern == NULL)
+    if(trackid == NULL || branchpattern == NULL || tracktitle == NULL)
       break;
 
     const char *desc =
@@ -225,12 +227,12 @@ generate_update_tracks(project_t *p, struct build_queue *builds,
       if(b == NULL) {
         plog(p, logctx,
              "ReleaseTrack %s: Target %s: no matching branch for pattern '%s'",
-              track, t->t_target, branchpattern);
+              trackid, t->t_target, branchpattern);
         continue;
       }
       plog(p, logctx,
            "ReleaseTrack: %s Target %s: Using branch '%s' for pattern '%s'",
-           track, t->t_target, b->b_branch, branchpattern);
+           trackid, t->t_target, b->b_branch, branchpattern);
 
 
       cfg_t *artifacts_msg = cfg_get_list(target, "artifacts");
@@ -298,7 +300,7 @@ generate_update_tracks(project_t *p, struct build_queue *builds,
       htsmsg_destroy(out2);
 
       snprintf(path, sizeof(path), "%s/%s-%s.json",
-               outpath, track, b->b_target);
+               outpath, trackid, b->b_target);
 
       int err = writefile(path, json, strlen(json));
       if(err == WRITEFILE_NO_CHANGE) {
@@ -319,7 +321,7 @@ generate_update_tracks(project_t *p, struct build_queue *builds,
       htsmsg_add_msg(outtargets, NULL, out);
     }
     htsmsg_t *outtrack = htsmsg_create_map();
-    htsmsg_add_str(outtrack, "name", track);
+    htsmsg_add_str(outtrack, "name", tracktitle);
     htsmsg_add_str(outtrack, "description", desc);
     htsmsg_add_msg(outtrack, "targets", outtargets);
 
