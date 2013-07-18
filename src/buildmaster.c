@@ -422,6 +422,7 @@ http_artifact(http_connection_t *hc, const char *remain, void *opaque)
   char jobsecret2[64];
   char status[64];
   char version[64];
+  char branch[128];
 
   int r = db_stream_row(0, c->get_build_by_id,
                         DB_RESULT_STRING(project),
@@ -431,7 +432,8 @@ http_artifact(http_connection_t *hc, const char *remain, void *opaque)
                         DB_RESULT_STRING(agent),
                         DB_RESULT_STRING(jobsecret2),
                         DB_RESULT_STRING(status),
-                        DB_RESULT_STRING(version));
+                        DB_RESULT_STRING(version),
+                        DB_RESULT_STRING(branch));
 
   mysql_stmt_reset(c->get_build_by_id);
 
@@ -578,6 +580,7 @@ http_report(http_connection_t *hc, const char *remain, void *opaque)
   char jobsecret2[64];
   char status[64];
   char version[64];
+  char branch[128];
 
   int r = db_stream_row(0, c->get_build_by_id,
                         DB_RESULT_STRING(project),
@@ -587,7 +590,8 @@ http_report(http_connection_t *hc, const char *remain, void *opaque)
                         DB_RESULT_STRING(agent),
                         DB_RESULT_STRING(jobsecret2),
                         DB_RESULT_STRING(status),
-                        DB_RESULT_STRING(version));
+                        DB_RESULT_STRING(version),
+                        DB_RESULT_STRING(branch));
 
   mysql_stmt_reset(c->get_build_by_id);
 
@@ -618,15 +622,17 @@ http_report(http_connection_t *hc, const char *remain, void *opaque)
   if(!strcmp(newstatus, "building")) {
     db_stmt_exec(c->build_progress_update, "si", msg, jobid);
     plog(p, "build/status",
-         "Build #%d: Status: %s", jobid, msg);
+         "Build #%d: %s in %s status: %s", jobid, version, branch, msg);
   } else if(!strcmp(newstatus, "failed")) {
     db_stmt_exec(c->build_finished, "ssi", "failed", msg, jobid);
     plog(p, "build/finalstatus",
-         COLOR_RED "Build #%d: Failed: %s", jobid, msg);
+         COLOR_RED "Build #%d: %s in %s failed: %s",
+         jobid, version, branch, msg);
   } else if(!strcmp(newstatus, "done")) {
     db_stmt_exec(c->build_finished, "ssi", "done", NULL, jobid);
     plog(p, "build/finalstatus",
-         COLOR_GREEN "Build #%d: Completed: %s", jobid, newstatus);
+         COLOR_GREEN "Build #%d: %s in %s completed",
+         jobid, version, branch);
     project_schedule_job(project_get(project), PROJECT_JOB_GENERATE_RELEASES);
   } else {
     return 400;

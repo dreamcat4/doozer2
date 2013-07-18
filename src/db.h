@@ -33,7 +33,7 @@ typedef struct conn {
 
 #define SQL_ALLOC_BUILD "UPDATE build SET agent=?, status=?, status_change=NOW(), buildstart=NOW(), attempts = attempts + 1, jobsecret=? WHERE id=?"
 
-#define SQL_GET_BUILD_BY_ID "SELECT project,revision,target,type,agent,jobsecret,status,version FROM build WHERE id=?"
+#define SQL_GET_BUILD_BY_ID "SELECT project,revision,target,type,agent,jobsecret,status,version,branch FROM build WHERE id=?"
 
 #define SQL_INSERT_ARTIFACT "INSERT INTO artifact (build_id, type, payload, storage, name, size, md5, sha1, contenttype, encoding) VALUES (?,?,?,?,?,?,?,?,?,?)"
 
