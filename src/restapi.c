@@ -85,7 +85,7 @@ build_to_htsmsg(MYSQL_STMT *q)
 
 
 #define ARTIFACT_MSG_FIELDS "id,created,name,type,size,md5,sha1," \
-  "dlcount,contenttype,encoding"
+  "dlcount,contenttype,encoding,patchcount"
 /**
  *
  */
@@ -102,6 +102,7 @@ artifact_to_htsmsg(MYSQL_STMT *q, const char *artifact_prefix)
   int dlcount;
   char contenttype[256];
   char encoding[256];
+  int patchcount;
 
   int r = db_stream_row(0, q,
                         DB_RESULT_INT(id),
@@ -113,7 +114,8 @@ artifact_to_htsmsg(MYSQL_STMT *q, const char *artifact_prefix)
                         DB_RESULT_STRING(sha1),
                         DB_RESULT_INT(dlcount),
                         DB_RESULT_STRING(contenttype),
-                        DB_RESULT_STRING(encoding));
+                        DB_RESULT_STRING(encoding),
+                        DB_RESULT_INT(patchcount));
   if(r < 0)
     return NULL;
 
@@ -130,6 +132,7 @@ artifact_to_htsmsg(MYSQL_STMT *q, const char *artifact_prefix)
   htsmsg_add_str(m, "md5",           md5);
   htsmsg_add_str(m, "sha1",          sha1);
   htsmsg_add_u32(m, "dlcount",       dlcount);
+  htsmsg_add_u32(m, "patchcount",    patchcount);
   htsmsg_add_str(m, "contenttype",   contenttype);
   htsmsg_add_str(m, "encoding",      encoding);
 
