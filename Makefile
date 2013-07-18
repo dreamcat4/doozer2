@@ -31,7 +31,7 @@ LDFLAGS += -lpthread -lssl -lcrypto
 LDFLAGS += $(shell mysql_config --libs_r)
 LDFLAGS += -L${BUILDDIR}/libgit2/lib -lgit2
 LDFLAGS += $(shell pkg-config --libs libcurl)
-LDFLAGS += -lssl
+LDFLAGS += -lssl -lbz2
 
 SRCS =  src/main.c \
 	src/cfg.c \
@@ -56,6 +56,8 @@ SRCS +=	src/misc/misc.c \
 
 SRCS +=	src/net/tcp.c \
 	src/net/http.c \
+
+SRCS += src/bsdiff.c
 
 # Various transformations
 SRCS  += $(SRCS-yes)

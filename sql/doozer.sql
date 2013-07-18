@@ -102,6 +102,10 @@ CREATE INDEX artifact_sha1 ON artifact (sha1);
 ALTER TABLE build MODIFY project VARCHAR(64);
 CREATE INDEX build_project ON build (project);
 
+--- 009
+
+ALTER TABLE artifact ADD COLUMN patchcount INT DEFAULT 0;
+
 
 SHOW COLUMNS FROM build;
 

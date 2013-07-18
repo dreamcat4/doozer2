@@ -9,6 +9,7 @@ typedef struct conn {
 
   MYSQL_STMT *get_artifact_by_sha1;
   MYSQL_STMT *incr_dlcount_by_sha1;
+  MYSQL_STMT *incr_patchcount_by_sha1;
   MYSQL_STMT *get_targets_for_build;
   MYSQL_STMT *insert_build;
   MYSQL_STMT *alloc_build;
@@ -26,6 +27,8 @@ typedef struct conn {
 #define SQL_GET_ARTIFACT_BY_SHA1 "SELECT storage,payload,project,name,artifact.type,contenttype,encoding FROM artifact,build WHERE artifact.sha1=? AND build.id = artifact.build_id"
 
 #define SQL_INCREASE_DLCOUNT_BY_SHA1 "UPDATE artifact SET dlcount = dlcount + 1 WHERE sha1 = ?"
+
+#define SQL_INCREASE_PATCHCOUNT_BY_SHA1 "UPDATE artifact SET patchcount = patchcount + 1 WHERE sha1 = ?"
 
 #define SQL_GET_TARGETS_FOR_BUILD "SELECT target,id,status FROM build WHERE revision = ? AND project = ? AND branch = ?"
 

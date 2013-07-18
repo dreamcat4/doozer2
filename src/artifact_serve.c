@@ -2,6 +2,7 @@
 #include <sys/stat.h>
 #include <sys/param.h>
 #include <sys/sendfile.h>
+#include <sys/mman.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,6 +26,250 @@
 #include "artifact_serve.h"
 #include "db.h"
 #include "cfg.h"
+#include "doozer.h"
+#include "bsdiff.h"
+
+static pthread_mutex_t patch_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+#define TMPMEMSIZE (128 * 1024 * 1024)
+
+/**
+ *
+ */
+static void *
+load_fd(int fd, int insize, size_t *outsize, int gzipped)
+{
+  void *in = malloc(insize);
+
+  if(in == NULL) {
+    close(fd);
+    return NULL;
+  }
+
+  if(read(fd, in, insize) != insize) {
+    free(in);
+    close(fd);
+    return NULL;
+  }
+  close(fd);
+
+
+  if(!gzipped) {
+    *outsize = insize;
+    return in;
+  }
+
+  void *out = mmap(NULL, TMPMEMSIZE,
+                   PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
+                   -1, 0);
+
+  if(out == MAP_FAILED) {
+    free(in);
+    return NULL;
+  }
+
+  z_stream z;
+  memset(&z, 0, sizeof(z));
+  inflateInit2(&z, 16+MAX_WBITS);
+
+  z.next_in  = in;
+  z.avail_in = insize;
+  z.next_out = out;
+  z.avail_out = TMPMEMSIZE;
+
+  int r = inflate(&z, Z_FINISH);
+  free(in);
+  inflateEnd(&z);
+  if(r < 0) {
+    munmap(out, TMPMEMSIZE);
+    return NULL;
+  }
+
+  *outsize = TMPMEMSIZE - z.avail_out;
+
+  void *ret = malloc(*outsize);
+  memcpy(ret, out, *outsize);
+  munmap(out, TMPMEMSIZE);
+  return ret;
+}
+
+
+/**
+ *
+ */
+static void *
+load_file(const char *path, size_t *outsize, int gzipped)
+{
+  int fd = open(path, O_RDONLY);
+  if(fd == -1)
+    return NULL;
+
+  struct stat st;
+  if(fstat(fd, &st)) {
+    int r = errno;
+    close(fd);
+    errno = r;
+    return NULL;
+  }
+  return load_fd(fd, st.st_size, outsize, gzipped);
+}
+
+
+/**
+ *
+ */
+static int
+do_send_file(http_connection_t *hc, const char *ct,
+             int content_len, const char *ce, int fd)
+{
+
+  http_send_header(hc, HTTP_STATUS_OK, ct, content_len, ce,
+                   NULL, 0, NULL, NULL, NULL);
+
+  if(!hc->hc_no_output) {
+    while(content_len > 0) {
+      int chunk = MIN(1024 * 1024 * 1024, content_len);
+      int r = sendfile(hc->hc_fd, fd, NULL, chunk);
+      if(r == -1) {
+        close(fd);
+        return -1;
+      }
+      content_len -= r;
+    }
+  }
+  close(fd);
+  return 0;
+}
+
+
+/**
+ *
+ */
+static int
+send_patch(http_connection_t *hc, const char *oldsha1, const char *newsha1,
+           const char *newpath, const char *newencoding,
+           conn_t *c, const char *basepath)
+{
+  if(newencoding != NULL && strcmp(newencoding, "gzip"))
+    return 1;
+
+  int err;
+  char patchfile[PATH_MAX];
+  char ce[256];
+  const char *ct = "binary/bsdiff";
+  cfg_root(root);
+
+  snprintf(ce, sizeof(ce), "bspatch-from-%s", oldsha1);
+
+  const char *patchstash = cfg_get_str(root, CFG("patchstash"),
+                                       "/var/tmp/doozer/patchstash");
+
+  if((err = makedirs(patchstash)) != 0) {
+    trace(LOG_ERR, "Unable to create patchstash directory %s -- %s",
+          patchstash, strerror(errno));
+    return 1;
+  }
+
+  snprintf(patchfile, sizeof(patchfile), "%s/%s-%s", patchstash,
+           oldsha1, newsha1);
+
+  pthread_mutex_lock(&patch_mutex);
+
+  int fd = open(patchfile, O_RDONLY);
+  if(fd == -1) {
+
+    // Make sure ''old'' file can be resolved before
+    // we do anything else
+
+    if(db_stmt_exec(c->get_artifact_by_sha1, "s", oldsha1)) {
+      pthread_mutex_unlock(&patch_mutex);
+      return 1;
+    }
+
+    char storage[32];
+    char payload[20000];
+    char project[128];
+    char name[256];
+    char type[128];
+    char content_type[128];
+    char content_encoding[128];
+    int r = db_stream_row(0, c->get_artifact_by_sha1,
+                          DB_RESULT_STRING(storage),
+                          DB_RESULT_STRING(payload),
+                          DB_RESULT_STRING(project),
+                          DB_RESULT_STRING(name),
+                          DB_RESULT_STRING(type),
+                          DB_RESULT_STRING(content_type),
+                          DB_RESULT_STRING(content_encoding),
+                          NULL);
+
+    mysql_stmt_reset(c->get_artifact_by_sha1);
+
+    if(r) {
+      pthread_mutex_unlock(&patch_mutex);
+      return 1;
+    }
+
+    char oldpath[PATH_MAX];
+    snprintf(oldpath, sizeof(oldpath), "%s/%s", basepath, payload);
+
+    trace(LOG_INFO, "Generating new patch between %s (%s) => %s (%s)",
+          oldsha1, oldpath, newsha1, newpath);
+
+    size_t newsize, oldsize;
+
+    void *new = load_file(newpath, &newsize, !strcmp(newencoding ?: "", "gzip"));
+    if(new == NULL) {
+      trace(LOG_ERR, "Unable to open file %s for patch creation -- %s",
+            newpath, strerror(errno));
+      pthread_mutex_unlock(&patch_mutex);
+      return 1;
+    }
+
+    void *old = load_file(oldpath, &oldsize, !strcmp(content_encoding, "gzip"));
+    if(old == NULL) {
+      trace(LOG_ERR, "Unable to open file %s for patch creation -- %s",
+            oldpath, strerror(errno));
+      free(new);
+      pthread_mutex_unlock(&patch_mutex);
+      return 1;
+    }
+
+    int rval = make_bsdiff(old, oldsize, new, newsize, patchfile);
+
+    free(new);
+    free(old);
+
+    if(rval) {
+      trace(LOG_ERR, "Unable to generate patch file %s", patchfile);
+      pthread_mutex_unlock(&patch_mutex);
+      return 1;
+    }
+    fd = open(patchfile, O_RDONLY);
+    if(fd == -1) {
+      trace(LOG_ERR, "Unable to open generated patch file %s -- %s",
+            patchfile, strerror(errno));
+      pthread_mutex_unlock(&patch_mutex);
+      return 1;
+    }
+  }
+
+  pthread_mutex_unlock(&patch_mutex);
+
+  struct stat st;
+  if(fstat(fd, &st)) {
+    trace(LOG_INFO,
+          "Stat failed for file '%s' -- %s",
+          patchfile, strerror(errno));
+    close(fd);
+    return 1;
+  }
+
+  if(do_send_file(hc, ct, st.st_size, ce, fd))
+    return -1;
+  return 0;
+}
+
 
 /**
  *
@@ -100,6 +345,34 @@ send_artifact(http_connection_t *hc, const char *remain, void *opaque)
 
     snprintf(path, sizeof(path), "%s/%s", basepath, payload);
 
+
+    char *encodings[16];
+    int nencodings = 0;
+    char *ae = http_arg_get(&hc->hc_args, "Accept-Encoding");
+
+    if(ae != NULL) {
+      nencodings = http_tokenize(ae, encodings, 16, ',');
+      for(int i = 0; i < nencodings; i++) {
+
+        char *x = strchr(encodings[i], ';');
+        if(x != NULL)
+          *x = 0;
+      }
+
+      const char *src;
+      if((src = mystrbegins(ae, "bspatch-from-")) != NULL) {
+        switch(send_patch(hc, src, remain, path, ce, c, basepath)) {
+        case -1:
+          return -1;
+        case 0:
+          db_stmt_exec(c->incr_patchcount_by_sha1, "s", remain);
+          return 0;
+        default:
+          break;
+        }
+      }
+    }
+
     int fd = open(path, O_RDONLY);
     if(fd == -1) {
       trace(LOG_INFO,
@@ -119,80 +392,31 @@ send_artifact(http_connection_t *hc, const char *remain, void *opaque)
 
     int64_t content_len = st.st_size;
 
-    char *encodings[16];
-    int nencodings = 0;
-
-    char *ae = http_arg_get(&hc->hc_args, "Accept-Encoding");
-
-    if(ae != NULL)
-      nencodings = http_tokenize(ae, encodings, 16, ',');
-
 
     if(ce != NULL) {
       // Content on disk is encoded, need to check if the client accepts that
       // encoding
-      int i;
-      for(i = 0; i < nencodings; i++) {
+      for(int i = 0; i < nencodings; i++) {
         if(!strcasecmp(encodings[i], ce)) {
           goto send_file;
         }
       }
 
-
       if(!strcasecmp(ce, "gzip")) {
-        char zbuf1[4096];
-        char zbuf2[32768];
-        z_stream z;
-        int retval = -1;
-        memset(&z, 0, sizeof(z));
-        inflateInit2(&z, 16+MAX_WBITS);
+        size_t outsize;
+        void *mem = load_fd(fd, st.st_size, &outsize, 1);
+        if(mem == NULL)
+          return 500;
 
-        http_send_header(hc, HTTP_STATUS_OK, ct, 0, NULL,
-                         NULL, 0, NULL, NULL, NULL);
-
-        do {
-          int r = read(fd, zbuf1, sizeof(zbuf1));
-          z.next_in = (void *)zbuf1;
-          z.avail_in = r >= 0 ? r : 0;
-          while(z.avail_in) {
-
-            z.next_out = (void *)zbuf2;
-            z.avail_out = sizeof(zbuf2);
-
-            int zr = inflate(&z, r <= 0 ? Z_FINISH : Z_NO_FLUSH);
-            if(zr < 0)
-              goto bad;
-
-            int b = sizeof(zbuf2) - z.avail_out;
-            if(write(hc->hc_fd, zbuf2, b) != b)
-              goto bad;
-          }
-        } while(r);
-        retval = 0;
-      bad:
-        close(fd);
-        inflateEnd(&z);
-        return retval;
+        htsbuf_append_prealloc(&hc->hc_reply, mem, outsize);
+        http_output_content(hc, ct);
+        goto count;
       }
     }
-
 
   send_file:
-    http_send_header(hc, HTTP_STATUS_OK, ct, content_len, ce,
-                     NULL, 0, NULL, NULL, NULL);
-
-    if(!hc->hc_no_output) {
-      while(content_len > 0) {
-        int chunk = MIN(1024 * 1024 * 1024, content_len);
-        r = sendfile(hc->hc_fd, fd, NULL, chunk);
-        if(r == -1) {
-          close(fd);
-          return -1;
-        }
-        content_len -= r;
-      }
-    }
-    close(fd);
+    if(do_send_file(hc, ct, content_len, ce, fd))
+      return -1;
 
   } else if(!strcmp(storage, "s3")) {
 
@@ -234,7 +458,7 @@ send_artifact(http_connection_t *hc, const char *remain, void *opaque)
   } else {
     return 501;
   }
-
+ count:
   db_stmt_exec(c->incr_dlcount_by_sha1, "s", remain);
   return 0;
 }

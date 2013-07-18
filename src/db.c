@@ -80,6 +80,7 @@ db_get_conn(void)
     c->m = m;
     c->get_artifact_by_sha1  = prep_stmt(m, SQL_GET_ARTIFACT_BY_SHA1);
     c->incr_dlcount_by_sha1 = prep_stmt(m, SQL_INCREASE_DLCOUNT_BY_SHA1);
+    c->incr_patchcount_by_sha1 = prep_stmt(m, SQL_INCREASE_PATCHCOUNT_BY_SHA1);
     c->get_targets_for_build = prep_stmt(m, SQL_GET_TARGETS_FOR_BUILD);
     c->insert_build          = prep_stmt(m, SQL_INSERT_BUILD);
     c->alloc_build           = prep_stmt(m, SQL_ALLOC_BUILD);
@@ -107,6 +108,7 @@ db_cleanup(void *aux)
 
   mysql_stmt_close(c->get_artifact_by_sha1);
   mysql_stmt_close(c->incr_dlcount_by_sha1);
+  mysql_stmt_close(c->incr_patchcount_by_sha1);
   mysql_stmt_close(c->get_targets_for_build);
   mysql_stmt_close(c->insert_build);
   mysql_stmt_close(c->alloc_build);
