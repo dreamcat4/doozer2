@@ -207,6 +207,7 @@ send_patch(http_connection_t *hc, const char *oldsha1, const char *newsha1,
 
     if(r) {
       pthread_mutex_unlock(&patch_mutex);
+      trace(LOG_DEBUG, "Unable to patch from unknown SHA-1 %s", oldsha1);
       return 1;
     }
 
@@ -236,6 +237,9 @@ send_patch(http_connection_t *hc, const char *oldsha1, const char *newsha1,
     }
 
     int rval = make_bsdiff(old, oldsize, new, newsize, patchfile);
+
+    trace(LOG_INFO, "Generated patch between %s (%s) => %s (%s) -- error: %d",
+          oldsha1, oldpath, newsha1, newpath, rval);
 
     free(new);
     free(old);
