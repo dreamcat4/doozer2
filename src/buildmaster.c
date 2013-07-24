@@ -19,6 +19,25 @@
 static int add_build(project_t *p, const char *branch, const char *revision,
                      const char *target, const char *reason, int no_output);
 
+
+/**
+ *
+ */
+static const char *
+build_url(cfg_t *pc, int id)
+{
+  static __thread char rbuf[512];
+
+  const char *pfx = cfg_get_str(pc, CFG("buildUrlPrefix"), NULL);
+
+  if(pfx == NULL || *pfx == 0)
+    return NULL;
+  snprintf(rbuf, sizeof(rbuf), "%s%s%d",
+           pfx, pfx[strlen(pfx)-1] == '/' ? "" : "/", id);
+  return rbuf;
+}
+
+
 /**
  *
  */
@@ -619,20 +638,23 @@ http_report(http_connection_t *hc, const char *remain, void *opaque)
     return 403;
   }
 
+  cfg_project(pc, project);
+  const char *url = build_url(pc, jobid) ?: "";
+
   if(!strcmp(newstatus, "building")) {
     db_stmt_exec(c->build_progress_update, "si", msg, jobid);
     plog(p, "build/status",
-         "Build #%d: %s in %s status: %s", jobid, version, branch, msg);
+         "Build #%d: %s in %s for %s status: %s", jobid, version, branch, target, msg);
   } else if(!strcmp(newstatus, "failed")) {
     db_stmt_exec(c->build_finished, "ssi", "failed", msg, jobid);
     plog(p, "build/finalstatus",
-         COLOR_RED "Build #%d: %s in %s failed: %s",
-         jobid, version, branch, msg);
+         COLOR_RED "Build #%d: "COLOR_OFF"%s "COLOR_RED"in "COLOR_OFF"%s "COLOR_RED"for "COLOR_OFF"%s "COLOR_RED"failed: %s %s",
+         jobid, version, branch, target, msg, url);
   } else if(!strcmp(newstatus, "done")) {
     db_stmt_exec(c->build_finished, "ssi", "done", NULL, jobid);
     plog(p, "build/finalstatus",
-         COLOR_GREEN "Build #%d: %s in %s completed",
-         jobid, version, branch);
+         COLOR_GREEN "Build #%d: "COLOR_OFF"%s "COLOR_GREEN"in "COLOR_OFF"%s "COLOR_GREEN"for "COLOR_OFF"%s "COLOR_GREEN"completed %s",
+         jobid, version, branch, target, url);
     project_schedule_job(project_get(project), PROJECT_JOB_GENERATE_RELEASES);
   } else {
     return 400;
@@ -711,9 +733,13 @@ buildmaster_check_expired_builds(conn_t *c)
 
     if(attempts >= maxattempts) {
       newstatus = "too_many_attempts";
+
+      cfg_project(pc, project);
+      const char *url = build_url(pc, id) ?: "";
+
       plog(p, "build/finalstatus",
-           COLOR_RED "Build #%d too many build attempts failed. Giving up",
-            id);
+           COLOR_RED "Build #%d too many build attempts failed. Giving up. %s",
+           id, url);
     } else {
       newstatus = "pending";
     }
