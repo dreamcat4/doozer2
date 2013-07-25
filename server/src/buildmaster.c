@@ -170,9 +170,10 @@ add_build(project_t *p, const char *branch, const char *revision,
   if(c == NULL)
     return DOOZER_ERROR_TRANSIENT;
 
-  plog(p, "build/queue", "Enqueue build for %s (%s %.8s) on %s by '%s'%s",
-        ver, branch, revision, target, reason,
-        no_output ? ", No artifacts will be stored" : "");
+  plog(p, "build/queue",
+       "Enqueue build for %s (%s %.8s) on %s by '%s'%s",
+       ver, branch, revision, target, reason,
+       no_output ? ", No artifacts will be stored" : "");
 
   db_stmt_exec(c->insert_build, "sssssssi",
                p->p_id, revision, target, reason,
@@ -770,6 +771,47 @@ buildmaster_periodic(void *aux)
   return NULL;
 }
 
+
+/**
+ *
+ */
+int
+buildmaster_add_build(const char *project, const char *branch,
+                      const char *target,  const char *reason,
+                      void (*msg)(void *opaque, const char *fmt, ...),
+                      void *opaque)
+{
+  project_t *p = project_get(project);
+  if(p == NULL) {
+    msg(opaque, "No such project: %s", project);
+    return 1;
+  }
+
+  struct ref_list refs;
+  git_repo_list_branches(p, &refs);
+  ref_t *r;
+  LIST_FOREACH(r, &refs, link) {
+    if(!strcmp(branch, r->name))
+      break;
+  }
+
+  if(r == NULL) {
+    msg(opaque, "No such branch");
+    goto bad;
+  }
+
+
+  if(add_build(p, branch, r->oidtxt, target, reason, 0)) {
+    msg(opaque, "Failed to enqueue build");
+    goto bad;
+  }
+  git_repo_free_refs(&refs);
+  return 0;
+
+ bad:
+  git_repo_free_refs(&refs);
+  return 1;
+}
 
 /**
  *

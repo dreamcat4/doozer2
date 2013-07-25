@@ -25,6 +25,7 @@
 #include "irc.h"
 #include "github.h"
 #include "restapi.h"
+#include "ctrlsock.h"
 
 #include <sys/types.h>
 #include <regex.h>
@@ -194,6 +195,8 @@ main(int argc, char **argv)
   db_init();
 
   artifact_serve_init();
+
+  ctrlsock_init();
 
   projects_init();
 

@@ -16,3 +16,13 @@ typedef struct buildjob {
   int no_output;
   struct conn *db;
 } buildjob_t;
+
+
+
+// Temporary until real command parser
+int
+buildmaster_add_build(const char *project, const char *branch,
+                      const char *target,
+                      const char *reason,
+                      void (*msg)(void *opaque, const char *fmt, ...),
+                      void *opaque);

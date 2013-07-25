@@ -1,7 +1,3 @@
 #pragma once
 
-void
-ctrlsock_init(void)
-{
-  
-}
+void ctrlsock_init(void);
