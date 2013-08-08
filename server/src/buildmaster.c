@@ -15,6 +15,7 @@
 #include "buildmaster.h"
 #include "db.h"
 #include "git.h"
+#include "urlshorten.h"
 
 static int add_build(project_t *p, const char *branch, const char *revision,
                      const char *target, const char *reason, int no_output);
@@ -34,7 +35,7 @@ build_url(cfg_t *pc, int id)
     return NULL;
   snprintf(rbuf, sizeof(rbuf), "%s%s%d",
            pfx, pfx[strlen(pfx)-1] == '/' ? "" : "/", id);
-  return rbuf;
+  return urlshorten(rbuf);
 }
 
 
