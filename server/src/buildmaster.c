@@ -12,11 +12,11 @@
 #include "libsvc/http.h"
 #include "libsvc/misc.h"
 #include "libsvc/trace.h"
+#include "libsvc/urlshorten.h"
 
 #include "buildmaster.h"
 #include "db.h"
 #include "git.h"
-#include "urlshorten.h"
 
 static int add_build(project_t *p, const char *branch, const char *revision,
                      const char *target, const char *reason, int no_output);

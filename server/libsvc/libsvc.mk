@@ -13,4 +13,5 @@ libunixservice_SRCS += \
 	trace.c \
 	irc.c \
 	cfg.c \
+	urlshorten.c \
 
