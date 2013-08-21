@@ -1,6 +1,5 @@
 /*
- *  tvheadend, TCP common functions
- *  Copyright (C) 2007 Andreas Öman
+ *  Copyright (C) 2013 Andreas Öman
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -34,7 +33,7 @@
 
 #include "doozer.h"
 #include "tcp.h"
-
+#include "trace.h"
 
 /**
  *

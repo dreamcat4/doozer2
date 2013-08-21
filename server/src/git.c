@@ -4,7 +4,7 @@
 
 #include "doozer.h"
 #include "git.h"
-
+#include "libsvc/threading.h"
 
 /**
  * Must be called with lock held

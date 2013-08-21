@@ -25,9 +25,8 @@
 
 #include "htsmsg_json.h"
 #include "htsbuf.h"
-//#include "misc/str.h"
-#include "misc/json.h"
-#include "misc/dbl.h"
+#include "json.h"
+#include "dbl.h"
 
 
 /**

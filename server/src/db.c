@@ -8,6 +8,7 @@
 #include "doozer.h"
 #include "db.h"
 #include "cfg.h"
+#include "libsvc/trace.h"
 
 static pthread_key_t dbkey;
 

@@ -2,9 +2,10 @@
 #include <stdio.h>
 #include <limits.h>
 
-#include "net/http.h"
-#include "misc/htsmsg_json.h"
-#include "misc/misc.h"
+#include "libsvc/http.h"
+#include "libsvc/htsmsg_json.h"
+#include "libsvc/misc.h"
+#include "libsvc/trace.h"
 
 #include "github.h"
 #include "cfg.h"

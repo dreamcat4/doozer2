@@ -10,10 +10,11 @@
 #include <git2.h>
 #include <mysql.h>
 
-#include "misc/htsmsg_json.h"
+#include "libsvc/htsmsg_json.h"
 
-#include "net/tcp.h"
-#include "net/http.h"
+#include "libsvc/tcp.h"
+#include "libsvc/http.h"
+#include "libsvc/trace.h"
 
 
 #include "artifact_serve.h"
@@ -31,7 +32,6 @@
 #include <regex.h>
 
 
-static int dosyslog = 0;
 static int running = 1;
 static int reload = 0;
 
@@ -65,41 +65,6 @@ doreload(int x)
   reload = 1;
 }
 
-/**
- *
- */
-void
-tracev(int level, const char *fmt, va_list ap)
-{
-  if(dosyslog) {
-    va_list aq;
-    va_copy(aq, ap);
-    vsyslog(level, fmt, aq);
-    va_end(aq);
-  }
-
-  if(!isatty(2))
-    return;
-
-  vfprintf(stderr, fmt, ap);
-  fputc('\n', stderr);
-}
-
-
-/**
- *
- */
-void
-trace(int level, const char *fmt, ...)
-{
-  char *s = mystrdupa(fmt);
-  decolorize(s);
-  va_list ap;
-  va_start(ap, fmt);
-  tracev(level, s, ap);
-  va_end(ap);
-}
-
 
 /**
  *
@@ -128,29 +93,6 @@ http_init(void)
 }
 
 
-
-/**
- *
- */
-static void
-enable_syslog(const char *facility)
-{
-  int f;
-  const char *x;
-  if(!strcmp(facility, "daemon"))
-    f = LOG_DAEMON;
-  else if((x = mystrbegins(facility, "local")) != NULL)
-    f = LOG_LOCAL0 + atoi(x);
-  else {
-    fprintf(stderr, "Invalid syslog config -- %s\n", facility);
-    exit(1);
-  }
-
-  dosyslog = 1;
-  openlog("doozer", LOG_PID, f);
-
-}
-
 /**
  *
  */
@@ -169,7 +111,7 @@ main(int argc, char **argv)
       cfgfile = optarg;
       break;
     case 's':
-      enable_syslog(optarg);
+      enable_syslog("doozer", optarg);
       break;
     }
   }
@@ -229,36 +171,4 @@ main(int argc, char **argv)
   }
 
   return 0;
-}
-
-
-/**
- *
- */
-void
-mutex_unlock_ptr(pthread_mutex_t **p)
-{
-  pthread_mutex_unlock(*p);
-}
-
-
-/**
- *
- */
-void
-decolorize(char *s)
-{
-  char *d = s;
-  while(*s) {
-    if(*s == '\003') {
-      s++;
-      if(*s >= '0' && *s <= '9')
-        s++;
-      if(*s >= '0' && *s <= '9')
-        s++;
-      continue;
-    }
-    *d++ = *s++;
-  }
-  *d = 0;
 }

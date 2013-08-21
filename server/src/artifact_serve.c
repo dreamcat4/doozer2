@@ -18,10 +18,10 @@
 
 #include <openssl/hmac.h>
 
-#include "net/tcp.h"
-#include "net/http.h"
-
-#include "misc/misc.h"
+#include "libsvc/tcp.h"
+#include "libsvc/http.h"
+#include "libsvc/misc.h"
+#include "libsvc/trace.h"
 
 #include "artifact_serve.h"
 #include "db.h"

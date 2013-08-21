@@ -10,8 +10,9 @@
 #include <errno.h>
 #include <fnmatch.h>
 
-#include "misc/misc.h"
-#include "misc/htsmsg_json.h"
+#include "libsvc/misc.h"
+#include "libsvc/htsmsg_json.h"
+#include "libsvc/trace.h"
 
 #include "releasemaker.h"
 #include "db.h"

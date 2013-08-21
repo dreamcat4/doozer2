@@ -9,9 +9,11 @@
 
 #include <curl/curl.h>
 
+#include "libsvc/misc.h"
+#include "libsvc/htsmsg_json.h"
+#include "libsvc/trace.h"
+
 #include "urlshorten.h"
-#include "misc/misc.h"
-#include "misc/htsmsg_json.h"
 #include "cfg.h"
 
 const char *

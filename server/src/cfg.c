@@ -4,8 +4,11 @@
 #include <limits.h>
 #include <dirent.h>
 
-#include "misc/htsmsg_json.h"
-#include "misc/misc.h"
+#include "libsvc/htsmsg_json.h"
+#include "libsvc/misc.h"
+#include "libsvc/trace.h"
+#include "libsvc/threading.h"
+
 #include "cfg.h"
 #include "project.h"
 

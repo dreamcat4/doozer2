@@ -1,8 +1,9 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "net/http.h"
-#include "misc/htsmsg_json.h"
+#include "libsvc/http.h"
+#include "libsvc/htsmsg_json.h"
+#include "libsvc/trace.h"
 
 #include "github.h"
 #include "cfg.h"

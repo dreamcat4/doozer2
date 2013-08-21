@@ -10,9 +10,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/param.h>
+#include <pthread.h>
 
 #include "misc.h"
 #include "utf8.h"
+#include "threading.h"
+
 
 static const char hexchars[16] = "0123456789ABCDEF";
 
@@ -415,3 +418,17 @@ makedirs(const char *path)
   r = errno;
   return r;
 }
+
+
+
+
+/**
+ *
+ */
+void
+mutex_unlock_ptr(pthread_mutex_t **p)
+{
+  pthread_mutex_unlock(*p);
+}
+
+

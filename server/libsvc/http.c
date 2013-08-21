@@ -28,9 +28,9 @@
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
 
-#include "misc/strtab.h"
-#include "misc/misc.h"
-
+#include "strtab.h"
+#include "misc.h"
+#include "trace.h"
 #include "tcp.h"
 #include "http.h"
 #include "cfg.h"

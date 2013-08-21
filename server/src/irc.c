@@ -17,10 +17,12 @@
 #include <ctype.h>
 
 #include "doozer.h"
-#include "misc/dial.h"
-#include "misc/queue.h"
-#include "misc/htsbuf.h"
-#include "misc/strtab.h"
+#include "libsvc/dial.h"
+#include "libsvc/queue.h"
+#include "libsvc/htsbuf.h"
+#include "libsvc/strtab.h"
+#include "libsvc/trace.h"
+#include "libsvc/misc.h"
 
 #include "cfg.h"
 #include "irc.h"

@@ -16,10 +16,9 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef HTTP_H_
-#define HTTP_H_
+#pragma once
 
-#include "misc/htsbuf.h"
+#include "htsbuf.h"
 
 TAILQ_HEAD(http_arg_list, http_arg);
 
@@ -144,5 +143,3 @@ int http_server_init(int port, const char *bindaddr);
 int http_access_verify(http_connection_t *hc);
 
 void http_deescape(char *s);
-
-#endif /* HTTP_H_ */

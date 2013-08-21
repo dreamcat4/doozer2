@@ -8,6 +8,11 @@
 
 #include <curl/curl.h>
 
+#include "libsvc/misc.h"
+#include "libsvc/htsmsg_json.h"
+#include "libsvc/trace.h"
+#include "libsvc/threading.h"
+
 #include "doozer.h"
 #include "project.h"
 #include "cfg.h"
@@ -15,9 +20,6 @@
 #include "buildmaster.h"
 #include "releasemaker.h"
 #include "irc.h"
-
-#include "misc/misc.h"
-#include "misc/htsmsg_json.h"
 
 LIST_HEAD(project_list, project);
 

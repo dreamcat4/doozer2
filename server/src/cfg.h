@@ -1,5 +1,4 @@
-#include "doozer.h"
-#include "misc/htsmsg.h"
+#include "libsvc/htsmsg.h"
 
 typedef htsmsg_t cfg_t;
 

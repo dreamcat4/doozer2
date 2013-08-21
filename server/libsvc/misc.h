@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <sys/time.h>
 
 #define URL_ESCAPE_PATH   1
 #define URL_ESCAPE_PARAM  2
@@ -29,3 +30,26 @@ void url_split(char *proto, int proto_size,
                const char *url);
 
 int makedirs(const char *path);
+
+
+
+#define mystrdupa(n) ({ int my_l = strlen(n); \
+  char *my_b = alloca(my_l + 1); \
+  memcpy(my_b, n, my_l + 1); })
+
+static inline const char *mystrbegins(const char *s1, const char *s2)
+{
+  while(*s2)
+    if(*s1++ != *s2++)
+      return NULL;
+  return s1;
+}
+
+
+static inline int64_t
+get_ts(void)
+{
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  return (int64_t)tv.tv_sec * 1000000LL + tv.tv_usec;
+}

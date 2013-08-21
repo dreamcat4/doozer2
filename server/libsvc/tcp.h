@@ -21,7 +21,7 @@
 
 #include <netinet/in.h>
 
-#include "misc/htsbuf.h"
+#include "htsbuf.h"
 
 void tcp_server_init(void);
 

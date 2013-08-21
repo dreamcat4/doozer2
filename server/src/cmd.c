@@ -4,8 +4,8 @@
 #include "cmd.h"
 #include "buildmaster.h"
 #include "doozer.h"
-
-#include "net/http.h" // wrong
+#include "libsvc/misc.h"
+#include "libsvc/http.h" // wrong
 
 int
 cmd_exec(const char *line, const char *user,

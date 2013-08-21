@@ -15,6 +15,8 @@
 #  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+include libsvc/libsvc.mk
+
 prefix ?= /usr/local
 
 BUILDDIR = ${CURDIR}/build
@@ -48,17 +50,7 @@ SRCS =  src/main.c \
 	src/cmd.c \
 	src/urlshorten.c \
 
-SRCS +=	src/misc/misc.c \
-	src/misc/htsbuf.c \
-	src/misc/htsmsg.c \
-	src/misc/htsmsg_json.c \
-	src/misc/json.c \
-	src/misc/dbl.c \
-	src/misc/dial.c \
-	src/misc/utf8.c \
-
-SRCS +=	src/net/tcp.c \
-	src/net/http.c \
+SRCS += ${libunixservice_SRCS:%.c=libsvc/%.c}
 
 SRCS += src/bsdiff.c
 

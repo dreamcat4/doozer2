@@ -36,7 +36,7 @@
 
 #include "bsdiff.h"
 
-#include "doozer.h"
+#include "libsvc/trace.h"
 
 #define MIN(x,y) (((x)<(y)) ? (x) : (y))
 

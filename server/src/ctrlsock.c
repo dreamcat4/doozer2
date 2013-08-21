@@ -8,9 +8,11 @@
 #include <stdlib.h>
 #include <pwd.h>
 
+#include "libsvc/htsbuf.h"
+#include "libsvc/trace.h"
+
 #include "doozer.h"
 #include "ctrlsock.h"
-#include "misc/htsbuf.h"
 #include "cmd.h"
 
 #define CTRLSOCKPATH "/tmp/doozerctrl"

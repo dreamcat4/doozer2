@@ -21,8 +21,7 @@
 
 #include <stdlib.h>
 #include <inttypes.h>
-#include "misc/queue.h"
-#include "doozer.h"
+#include "queue.h"
 
 #define HTSMSG_ERR_FIELD_NOT_FOUND       -1
 #define HTSMSG_ERR_CONVERSION_IMPOSSIBLE -2
@@ -317,12 +316,12 @@ const char *htsmsg_get_cdata(htsmsg_t *m, const char *field);
 
 static inline void htsmsg_retain(htsmsg_t *m)
 {
-  atomic_add(&m->hm_refcount, 1);
+  __sync_fetch_and_add(&m->hm_refcount, 1);
 }
 
 static inline void htsmsg_release(htsmsg_t *m)
 {
-  if(atomic_add(&m->hm_refcount, -1) == 1)
+  if(__sync_fetch_and_add(&m->hm_refcount, -1) == 1)
     htsmsg_destroy(m);
 }
 
