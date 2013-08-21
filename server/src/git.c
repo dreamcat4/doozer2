@@ -18,7 +18,7 @@ ensure_repo(project_t *p)
   if(p->p_repo != NULL)
     return 0;
 
-  cfg_project(pc, p->p_id);
+  project_cfg(pc, p->p_id);
   if(pc == NULL) {
     plog(p, "git/repo", "Unable to open GIT repo -- No project config");
     return DOOZER_ERROR_PERMANENT;
@@ -111,7 +111,7 @@ git_repo_sync(project_t *p)
   if((retval = ensure_repo(p)))
     return retval;
 
-  cfg_project(pc, p->p_id);
+  project_cfg(pc, p->p_id);
   if(pc == NULL)
     return DOOZER_ERROR_PERMANENT;
 

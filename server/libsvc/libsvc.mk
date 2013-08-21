@@ -11,4 +11,6 @@ libunixservice_SRCS += \
 	tcp.c \
 	http.c \
 	trace.c \
+	irc.c \
+	cfg.c \
 

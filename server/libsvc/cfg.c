@@ -1,3 +1,4 @@
+#include <pthread.h>
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
@@ -10,22 +11,10 @@
 #include "libsvc/threading.h"
 
 #include "cfg.h"
-#include "project.h"
 
-LIST_HEAD(pconf_list, pconf);
-
-typedef struct pconf {
-  LIST_ENTRY(pconf) pc_link;
-  char *pc_id;
-  int pc_mark;
-  htsmsg_t *pc_msg;
-  time_t pc_mtime;  // mtime of last read conf
-} pconf_t;
-
-pthread_mutex_t cfg_mutex = PTHREAD_MUTEX_INITIALIZER;
-
+static pthread_mutex_t cfg_mutex = PTHREAD_MUTEX_INITIALIZER;
 static cfg_t *cfgroot;
-static struct pconf_list pconfs;
+
 
 
 /**
@@ -97,142 +86,6 @@ cfg_load(const char *filename)
   pthread_mutex_unlock(&cfg_mutex);
   trace(LOG_NOTICE, "Config updated");
   return 0;
-}
-
-
-/**
- *
- */
-static void
-project_load_conf(char *fname, const char *path)
-{
-  char buf[PATH_MAX];
-
-  if(*fname == '#' || *fname == '.')
-    return;
-
-  char *postfix = strrchr(fname, '.');
-  if(postfix == NULL || strcmp(postfix, ".json"))
-    return;
-
-  *postfix = 0;
-
-  snprintf(buf, sizeof(buf), "%s/%s.json", path, fname);
-
-  int err;
-  time_t mtime;
-  char *json = readfile(buf, &err, &mtime);
-  if(json == NULL) {
-    trace(LOG_ERR, "Unable to read file %s -- %s", buf, strerror(err));
-    trace(LOG_ERR, "Config for project '%s' not updated", fname);
-    return;
-  }
-
-  char errbuf[256];
-  htsmsg_t *m = htsmsg_json_deserialize(json, errbuf, sizeof(errbuf));
-  free(json);
-  if(m == NULL) {
-    trace(LOG_ERR, "Unable to parse file %s -- %s", buf, errbuf);
-    trace(LOG_ERR, "Config for project '%s' not updated", fname);
-    return;
-  }
-
-  pconf_t *pc;
-
-  LIST_FOREACH(pc, &pconfs, pc_link)
-    if(!strcmp(pc->pc_id, fname))
-      break;
-
-  if(pc == NULL) {
-    pc = calloc(1, sizeof(pconf_t));
-    LIST_INSERT_HEAD(&pconfs, pc, pc_link);
-    pc->pc_id = strdup(fname);
-  } else {
-    pc->pc_mark = 0;
-
-    if(pc->pc_mtime == mtime)
-      return;
-
-    htsmsg_release(pc->pc_msg);
-  }
-
-  pc->pc_msg = m;
-  htsmsg_retain(m);
-
-  project_init(fname, pc->pc_mtime != mtime);
-
-  pc->pc_mtime = mtime;
-
-  trace(LOG_INFO, "%s: Config loaded", fname);
-}
-
-
-/**
- *
- */
-void
-projects_reload(void)
-{
-  pconf_t *pc, *next;
-  cfg_root(root);
-
-  const char *path = cfg_get_str(root, CFG("projectConfigDir"), "projects");
-
-  if(path == NULL)
-    return;
-
-  struct dirent **namelist;
-  int n = scandir(path, &namelist, NULL, NULL);
-  if(n < 0) {
-    trace(LOG_ERR, "Unable to scan project config dir %s -- %s",
-          path, strerror(errno));
-    return;
-  }
-
-  scoped_lock(&cfg_mutex);
-
-  LIST_FOREACH(pc, &pconfs, pc_link)
-    pc->pc_mark = 1;
-
-  while(n--) {
-    project_load_conf(namelist[n]->d_name, path);
-    free(namelist[n]);
-  }
-  free(namelist);
-
-
-  for(pc = LIST_FIRST(&pconfs); pc != NULL; pc = next) {
-    next = LIST_NEXT(pc, pc_link);
-    if(!pc->pc_mark)
-      continue;
-
-    trace(LOG_INFO, "%s: Config unloaded", pc->pc_id);
-
-    LIST_REMOVE(pc, pc_link);
-    free(pc->pc_id);
-    htsmsg_release(pc->pc_msg);
-    free(pc);
-  }
-}
-
-
-/**
- *
- */
-cfg_t *
-cfg_get_project(const char *id)
-{
-  pconf_t *pc;
-  scoped_lock(&cfg_mutex);
-
-  LIST_FOREACH(pc, &pconfs, pc_link) {
-    if(!strcmp(pc->pc_id, id)) {
-      htsmsg_t *c = pc->pc_msg;
-      htsmsg_retain(c);
-      return c;
-    }
-  }
-  return NULL;
 }
 
 

@@ -22,12 +22,13 @@
 #include "libsvc/http.h"
 #include "libsvc/misc.h"
 #include "libsvc/trace.h"
+#include "libsvc/cfg.h"
 
 #include "artifact_serve.h"
 #include "db.h"
-#include "cfg.h"
 #include "doozer.h"
 #include "bsdiff.h"
+#include "project.h"
 
 static pthread_mutex_t patch_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -334,7 +335,7 @@ send_artifact(http_connection_t *hc, const char *remain, void *opaque)
 
   } else if(!strcmp(storage, "file")) {
 
-    cfg_project(pc, project);
+    project_cfg(pc, project);
     if(pc == NULL)
       return 404;
 
@@ -424,7 +425,7 @@ send_artifact(http_connection_t *hc, const char *remain, void *opaque)
 
   } else if(!strcmp(storage, "s3")) {
 
-    cfg_project(p, project);
+    project_cfg(p, project);
     if(p == NULL)
       return 404;
 

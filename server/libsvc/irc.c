@@ -16,7 +16,6 @@
 #include <errno.h>
 #include <ctype.h>
 
-#include "doozer.h"
 #include "libsvc/dial.h"
 #include "libsvc/queue.h"
 #include "libsvc/htsbuf.h"

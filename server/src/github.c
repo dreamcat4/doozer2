@@ -4,9 +4,9 @@
 #include "libsvc/http.h"
 #include "libsvc/htsmsg_json.h"
 #include "libsvc/trace.h"
+#include "libsvc/cfg.h"
 
 #include "github.h"
-#include "cfg.h"
 #include "project.h"
 
 
@@ -47,7 +47,7 @@ http_github(http_connection_t *hc, const char *remain, void *opaque)
     return 400;
   }
 
-  cfg_project(pc, pid);
+  project_cfg(pc, pid);
   if(pc == NULL) {
     trace(LOG_DEBUG, "github: Project '%s' not configured", pid);
     return 404;

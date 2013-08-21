@@ -36,14 +36,12 @@ LDFLAGS += $(shell pkg-config --libs libcurl)
 LDFLAGS += -lssl -lbz2
 
 SRCS =  src/main.c \
-	src/cfg.c \
 	src/artifact_serve.c \
 	src/db.c \
 	src/project.c \
 	src/buildmaster.c \
 	src/git.c \
 	src/releasemaker.c \
-	src/irc.c \
 	src/github.c \
 	src/restapi.c \
 	src/ctrlsock.c \
@@ -63,9 +61,8 @@ OBJS_EXTRA = $(SRCS_EXTRA:%.c=$(BUILDDIR)/%.so)
 DEPS=    ${OBJS:%.o=%.d}
 
 # Common CFLAGS for all files
-CFLAGS_com  = -g -funsigned-char -O2
-CFLAGS_com += -D_FILE_OFFSET_BITS=64
-CFLAGS_com += -I${BUILDDIR} -I${CURDIR}/src -I${CURDIR}
+CFLAGS_com  = -g -funsigned-char -O2 -D_FILE_OFFSET_BITS=64
+CFLAGS_com += -I${BUILDDIR} -I${CURDIR}
 CFLAGS_com += -I${BUILDDIR}/libgit2/include/
 
 all: ${PROG}
@@ -78,7 +75,7 @@ ${PROG}: $(OBJS) ${OBJS_EXTRA} Makefile
 
 ${BUILDDIR}/%.o: %.c Makefile ${BUILDDIR}/libgit2/include/git2.h
 	@mkdir -p $(dir $@)
-	$(CC) -MD -MP $(CFLAGS_com) $(CFLAGS) $(CFLAGS_cfg) -c -o $@ $(CURDIR)/$<
+	$(CC) -MD -MP $(CFLAGS_com) $(CFLAGS) -c -o $@ $(CURDIR)/$<
 
 clean:
 	rm -rf ${BUILDDIR}/src

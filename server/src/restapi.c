@@ -6,9 +6,9 @@
 #include "libsvc/htsmsg_json.h"
 #include "libsvc/misc.h"
 #include "libsvc/trace.h"
+#include "libsvc/cfg.h"
 
 #include "github.h"
-#include "cfg.h"
 #include "project.h"
 #include "db.h"
 #include "restapi.h"
@@ -307,7 +307,7 @@ do_releases_list(http_connection_t *hc, const char *project,
 {
   char path[PATH_MAX];
 
-  cfg_project(pc, project);
+  project_cfg(pc, project);
   if(pc == NULL)
     return 404;
 

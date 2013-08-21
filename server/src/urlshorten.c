@@ -12,9 +12,9 @@
 #include "libsvc/misc.h"
 #include "libsvc/htsmsg_json.h"
 #include "libsvc/trace.h"
+#include "libsvc/cfg.h"
 
 #include "urlshorten.h"
-#include "cfg.h"
 
 const char *
 urlshorten(const char *input)

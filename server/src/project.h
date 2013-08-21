@@ -1,7 +1,7 @@
 #pragma once
 
 #include <git2.h>
-#include "cfg.h"
+#include "libsvc/cfg.h"
 #include "doozer.h"
 
 #define PROJECT_JOB_UPDATE_REPO        0x1
@@ -44,6 +44,9 @@ void projects_init(void);
 
 void project_schedule_job(project_t *p, int mask);
 
+#define project_cfg(x, id) cfg_t *x __attribute__((cleanup(cfg_releasep))) = project_get_cfg(id);
+
+cfg_t *project_get_cfg(const char *id);
 
 /**
  * Project specific log
@@ -70,3 +73,4 @@ void project_schedule_job(project_t *p, int mask);
  */
 void plog(project_t *p, const char *context, const char *fmt, ...)
  __attribute__ ((format (printf, 3, 4)));
+

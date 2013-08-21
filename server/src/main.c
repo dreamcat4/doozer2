@@ -15,15 +15,15 @@
 #include "libsvc/tcp.h"
 #include "libsvc/http.h"
 #include "libsvc/trace.h"
+#include "libsvc/irc.h"
+#include "libsvc/cfg.h"
 
 
 #include "artifact_serve.h"
 #include "db.h"
 #include "doozer.h"
-#include "cfg.h"
 #include "project.h"
 #include "buildmaster.h"
-#include "irc.h"
 #include "github.h"
 #include "restapi.h"
 #include "ctrlsock.h"

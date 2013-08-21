@@ -31,7 +31,6 @@
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
 
-#include "doozer.h"
 #include "tcp.h"
 #include "trace.h"
 

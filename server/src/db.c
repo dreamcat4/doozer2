@@ -5,10 +5,11 @@
 #include <stdlib.h>
 #include <stdarg.h>
 
+#include "libsvc/cfg.h"
+#include "libsvc/trace.h"
+
 #include "doozer.h"
 #include "db.h"
-#include "cfg.h"
-#include "libsvc/trace.h"
 
 static pthread_key_t dbkey;
 

@@ -144,7 +144,7 @@ generate_update_tracks(project_t *p, struct build_queue *builds,
   char logctx[128];
 
   cfg_root(root);
-  cfg_project(pc, p->p_id);
+  project_cfg(pc, p->p_id);
   if(pc == NULL)
     return;
 
