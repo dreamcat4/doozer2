@@ -17,6 +17,7 @@
 #include "libsvc/trace.h"
 #include "libsvc/irc.h"
 #include "libsvc/cfg.h"
+#include "libsvc/ctrlsock.h"
 
 
 #include "artifact_serve.h"
@@ -26,7 +27,6 @@
 #include "buildmaster.h"
 #include "github.h"
 #include "restapi.h"
-#include "ctrlsock.h"
 
 #include <sys/types.h>
 #include <regex.h>
@@ -102,6 +102,7 @@ main(int argc, char **argv)
   int c;
   sigset_t set;
   const char *cfgfile = NULL;
+  const char *ctrlsockpath = "/tmp/doozerctrl";
 
   signal(SIGPIPE, handle_sigpipe);
 
@@ -138,7 +139,7 @@ main(int argc, char **argv)
 
   artifact_serve_init();
 
-  ctrlsock_init();
+  ctrlsock_init(ctrlsockpath);
 
   projects_init();
 

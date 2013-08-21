@@ -14,4 +14,5 @@ libunixservice_SRCS += \
 	irc.c \
 	cfg.c \
 	urlshorten.c \
+	ctrlsock.c \
 

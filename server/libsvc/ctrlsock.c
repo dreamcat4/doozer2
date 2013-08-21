@@ -7,15 +7,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pwd.h>
+#include <sys/stat.h>
+#include <pthread.h>
 
-#include "libsvc/htsbuf.h"
-#include "libsvc/trace.h"
+#include "htsbuf.h"
+#include "trace.h"
 
-#include "doozer.h"
 #include "ctrlsock.h"
-#include "cmd.h"
 
-#define CTRLSOCKPATH "/tmp/doozerctrl"
+int cmd_exec(const char *line, const char *user,
+             void (*msg)(void *opaque, const char *fmt, ...),
+             void *opaque);
+
 
 static int ctrlsock_fd;
 
@@ -190,7 +193,7 @@ ctrlsock_thread(void *aux)
  *
  */
 void
-ctrlsock_init(void)
+ctrlsock_init(const char *ctrlsockpath)
 {
   int fd = socket(AF_UNIX, SOCK_STREAM, 0);
   if(fd == -1) {
@@ -203,21 +206,23 @@ ctrlsock_init(void)
 
   memset(&sun, 0, sizeof(sun));
 
-  unlink(CTRLSOCKPATH);
+  unlink(ctrlsockpath);
 
   sun.sun_family = AF_UNIX;
-  strcpy(sun.sun_path, CTRLSOCKPATH);
+  strcpy(sun.sun_path, ctrlsockpath);
   if(bind(fd, (struct sockaddr *)&sun, sizeof(sun))) {
     trace(LOG_ERR, "Unable to bind ctrl socket %s -- %s",
-          CTRLSOCKPATH, strerror(errno));
+          ctrlsockpath, strerror(errno));
     exit(1);
   }
 
   if(listen(fd, 10)) {
     trace(LOG_ERR, "Unable to listen on ctrl socket %s -- %s",
-          CTRLSOCKPATH, strerror(errno));
+          ctrlsockpath, strerror(errno));
     exit(1);
   }
+
+  chmod(ctrlsockpath, 0770);
 
   ctrlsock_fd = fd;
 
