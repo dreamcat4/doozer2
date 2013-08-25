@@ -8,10 +8,15 @@
 #include "libsvc/cfg.h"
 #include "libsvc/trace.h"
 
-#include "doozer.h"
 #include "db.h"
 
 static pthread_key_t dbkey;
+
+typedef struct stmt {
+  LIST_ENTRY(stmt) link;
+  MYSQL_STMT *mysql_stmt;
+  char *sql;
+} stmt_t;
 
 /**
  *
@@ -26,6 +31,30 @@ prep_stmt(MYSQL *m, const char *str)
     return NULL;
   }
   return ms;
+}
+
+
+/**
+ *
+ */
+MYSQL_STMT *
+db_stmt_get(conn_t *c, const char *str)
+{
+  stmt_t *s;
+  LIST_FOREACH(s, &c->prep_statements, link) {
+    if(!strcmp(s->sql, str))
+      break;
+  }
+
+  if(s == NULL) {
+    s = malloc(sizeof(stmt_t));
+    s->sql = strdup(str);
+    s->mysql_stmt = prep_stmt(c->m, str);
+  } else {
+    LIST_REMOVE(s, link);
+  }
+  LIST_INSERT_HEAD(&c->prep_statements, s, link);
+  return s->mysql_stmt;
 }
 
 
@@ -80,20 +109,6 @@ db_get_conn(void)
 
     c = calloc(1, sizeof(conn_t));
     c->m = m;
-    c->get_artifact_by_sha1  = prep_stmt(m, SQL_GET_ARTIFACT_BY_SHA1);
-    c->incr_dlcount_by_sha1 = prep_stmt(m, SQL_INCREASE_DLCOUNT_BY_SHA1);
-    c->incr_patchcount_by_sha1 = prep_stmt(m, SQL_INCREASE_PATCHCOUNT_BY_SHA1);
-    c->get_targets_for_build = prep_stmt(m, SQL_GET_TARGETS_FOR_BUILD);
-    c->insert_build          = prep_stmt(m, SQL_INSERT_BUILD);
-    c->alloc_build           = prep_stmt(m, SQL_ALLOC_BUILD);
-    c->get_build_by_id       = prep_stmt(m, SQL_GET_BUILD_BY_ID);
-    c->insert_artifact       = prep_stmt(m, SQL_INSERT_ARTIFACT);
-    c->build_finished        = prep_stmt(m, SQL_BUILD_FINISHED);
-    c->build_progress_update = prep_stmt(m, SQL_BUILD_PROGRESS_UPDATE);
-    c->get_expired_builds    = prep_stmt(m, SQL_GET_EXPIRED_BUILDS);
-    c->restart_build         = prep_stmt(m, SQL_RESTART_BUILD);
-    c->get_releases          = prep_stmt(m, SQL_GET_RELEASES);
-    c->get_artifacts         = prep_stmt(m, SQL_GET_ARTIFACTS);
     pthread_setspecific(dbkey, c);
   }
   return c;
@@ -108,25 +123,16 @@ db_cleanup(void *aux)
 {
   conn_t *c = aux;
 
-  mysql_stmt_close(c->get_artifact_by_sha1);
-  mysql_stmt_close(c->incr_dlcount_by_sha1);
-  mysql_stmt_close(c->incr_patchcount_by_sha1);
-  mysql_stmt_close(c->get_targets_for_build);
-  mysql_stmt_close(c->insert_build);
-  mysql_stmt_close(c->alloc_build);
-  mysql_stmt_close(c->get_build_by_id);
-  mysql_stmt_close(c->insert_artifact);
-  mysql_stmt_close(c->build_progress_update);
-  mysql_stmt_close(c->build_finished);
-  mysql_stmt_close(c->get_expired_builds);
-  mysql_stmt_close(c->restart_build);
-  mysql_stmt_close(c->get_releases);
-  mysql_stmt_close(c->get_artifacts);
-
+  stmt_t *s;
+  while((s = LIST_FIRST(&c->prep_statements)) != NULL) {
+    LIST_REMOVE(s, link);
+    mysql_stmt_close(s->mysql_stmt);
+    free(s->sql);
+    free(s);
+  }
   mysql_close(c->m);
   free(c);
 }
-
 
 
 /**
@@ -143,6 +149,9 @@ db_init(void)
 int
 db_stmt_exec(MYSQL_STMT *s, const char *fmt, ...)
 {
+  if(s == NULL)
+    return -1;
+
   int p, args = strlen(fmt);
   int *x;
 

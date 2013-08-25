@@ -13,10 +13,11 @@
 #include "libsvc/misc.h"
 #include "libsvc/trace.h"
 #include "libsvc/urlshorten.h"
+#include "libsvc/db.h"
 
 #include "buildmaster.h"
-#include "db.h"
 #include "git.h"
+#include "sql_statements.h"
 
 static int add_build(project_t *p, const char *branch, const char *revision,
                      const char *target, const char *reason, int no_output);
@@ -112,8 +113,8 @@ buildmaster_check_for_builds(project_t *p)
     plog(p, "build/check", "Checking build status for branch %s (%.8s)",
          b->name, b->oidtxt);
 
-    if(db_stmt_exec(c->get_targets_for_build, "sss",
-                    b->oidtxt, p->p_id, b->name)) {
+    MYSQL_STMT *s = db_stmt_get(c, SQL_GET_TARGETS_FOR_BUILD);
+    if(db_stmt_exec(s, "sss", b->oidtxt, p->p_id, b->name)) {
       retval = DOOZER_ERROR_TRANSIENT;
       break;
     }
@@ -125,7 +126,7 @@ buildmaster_check_for_builds(project_t *p)
       char target[64];
       int id;
       char status[64];
-      int r = db_stream_row(0, c->get_targets_for_build,
+      int r = db_stream_row(0, s,
                             DB_RESULT_STRING(target),
                             DB_RESULT_INT(id),
                             DB_RESULT_STRING(status));
@@ -177,7 +178,7 @@ add_build(project_t *p, const char *branch, const char *revision,
        ver, branch, revision, target, reason,
        no_output ? ", No artifacts will be stored" : "");
 
-  db_stmt_exec(c->insert_build, "sssssssi",
+  db_stmt_exec(db_stmt_get(c, SQL_INSERT_BUILD), "sssssssi",
                p->p_id, revision, target, reason,
                "pending", branch, ver, no_output);
   return 0;
@@ -267,7 +268,7 @@ getjob(char **targets, unsigned int numtargets, buildjob_t *bj,
   snprintf(bj->jobsecret, sizeof(bj->jobsecret), "%u",
            (unsigned int)lrand48());
 
-  db_stmt_exec(c->alloc_build, "sssi",
+  db_stmt_exec(db_stmt_get(c, SQL_ALLOC_BUILD), "sssi",
                agent, "building", bj->jobsecret, bj->id);
 
   bj->db = c;
@@ -433,7 +434,9 @@ http_artifact(http_connection_t *hc, const char *remain, void *opaque)
   if(c == NULL)
     return 503;
 
-  if(db_stmt_exec(c->get_build_by_id, "i", jobid))
+  MYSQL_STMT *s = db_stmt_get(c, SQL_GET_BUILD_BY_ID);
+
+  if(db_stmt_exec(s, "i", jobid))
     return 503;
 
   char project[64];
@@ -446,7 +449,7 @@ http_artifact(http_connection_t *hc, const char *remain, void *opaque)
   char version[64];
   char branch[128];
 
-  int r = db_stream_row(0, c->get_build_by_id,
+  int r = db_stream_row(0, s,
                         DB_RESULT_STRING(project),
                         DB_RESULT_STRING(revision),
                         DB_RESULT_STRING(target),
@@ -457,7 +460,7 @@ http_artifact(http_connection_t *hc, const char *remain, void *opaque)
                         DB_RESULT_STRING(version),
                         DB_RESULT_STRING(branch));
 
-  mysql_stmt_reset(c->get_build_by_id);
+  mysql_stmt_reset(s);
 
   switch(r) {
   case DB_ERR_OTHER:
@@ -486,6 +489,8 @@ http_artifact(http_connection_t *hc, const char *remain, void *opaque)
   project_cfg(pc, project);
   if(pc == NULL)
     return 410;
+
+  s = db_stmt_get(c, SQL_INSERT_BUILD);
 
   if(hc->hc_post_len > 16384 ||
      !strcmp(encoding ?: "", "gzip") ||
@@ -532,7 +537,7 @@ http_artifact(http_connection_t *hc, const char *remain, void *opaque)
 
     snprintf(path, sizeof(path), "%d/%s", jobid, name);
 
-    db_stmt_exec(c->insert_artifact, "issssissss",
+    db_stmt_exec(s, "issssissss",
                  jobid,
                  type,
                  path,
@@ -550,7 +555,7 @@ http_artifact(http_connection_t *hc, const char *remain, void *opaque)
 
   } else {
 
-    db_stmt_exec(c->insert_artifact, "isbssissss",
+    db_stmt_exec(s, "isbssissss",
                  jobid,
                  type,
                  hc->hc_post_data, hc->hc_post_len,
@@ -591,7 +596,9 @@ http_report(http_connection_t *hc, const char *remain, void *opaque)
   if(c == NULL)
     return 503;
 
-  if(db_stmt_exec(c->get_build_by_id, "i", jobid))
+  MYSQL_STMT *s = db_stmt_get(c, SQL_GET_BUILD_BY_ID);
+
+  if(db_stmt_exec(s, "i", jobid))
     return 503;
 
   char project[64];
@@ -604,7 +611,7 @@ http_report(http_connection_t *hc, const char *remain, void *opaque)
   char version[64];
   char branch[128];
 
-  int r = db_stream_row(0, c->get_build_by_id,
+  int r = db_stream_row(0, s,
                         DB_RESULT_STRING(project),
                         DB_RESULT_STRING(revision),
                         DB_RESULT_STRING(target),
@@ -615,7 +622,7 @@ http_report(http_connection_t *hc, const char *remain, void *opaque)
                         DB_RESULT_STRING(version),
                         DB_RESULT_STRING(branch));
 
-  mysql_stmt_reset(c->get_build_by_id);
+  mysql_stmt_reset(s);
 
   switch(r) {
   case DB_ERR_OTHER:
@@ -645,16 +652,16 @@ http_report(http_connection_t *hc, const char *remain, void *opaque)
   const char *url = build_url(pc, jobid) ?: "";
 
   if(!strcmp(newstatus, "building")) {
-    db_stmt_exec(c->build_progress_update, "si", msg, jobid);
+    db_stmt_exec(db_stmt_get(c, SQL_BUILD_PROGRESS_UPDATE), "si", msg, jobid);
     plog(p, "build/status",
          "Build #%d: %s in %s for %s status: %s", jobid, version, branch, target, msg);
   } else if(!strcmp(newstatus, "failed")) {
-    db_stmt_exec(c->build_finished, "ssi", "failed", msg, jobid);
+    db_stmt_exec(db_stmt_get(c, SQL_BUILD_FINISHED), "ssi", "failed", msg, jobid);
     plog(p, "build/finalstatus",
          COLOR_RED "Build #%d: "COLOR_OFF"%s "COLOR_RED"in "COLOR_OFF"%s "COLOR_RED"for "COLOR_OFF"%s "COLOR_RED"failed: %s %s",
          jobid, version, branch, target, msg, url);
   } else if(!strcmp(newstatus, "done")) {
-    db_stmt_exec(c->build_finished, "ssi", "done", NULL, jobid);
+    db_stmt_exec(db_stmt_get(c, SQL_BUILD_FINISHED), "ssi", "done", NULL, jobid);
     plog(p, "build/finalstatus",
          COLOR_GREEN "Build #%d: "COLOR_OFF"%s "COLOR_GREEN"in "COLOR_OFF"%s "COLOR_GREEN"for "COLOR_OFF"%s "COLOR_GREEN"completed %s",
          jobid, version, branch, target, url);
@@ -706,7 +713,9 @@ buildmaster_check_expired_builds(conn_t *c)
   timeout     = cfg_get_int(root, CFG("buildmaster", "buildtimeout"), 300);
   maxattempts = cfg_get_int(root, CFG("buildmaster", "buildattempts"), 3);
 
-  if(db_stmt_exec(c->get_expired_builds, "i", timeout))
+  MYSQL_STMT *s = db_stmt_get(c, SQL_GET_EXPIRED_BUILDS);
+
+  if(db_stmt_exec(s, "i", timeout))
     return;
 
   int do_commit = 0;
@@ -718,7 +727,7 @@ buildmaster_check_expired_builds(conn_t *c)
     char agent[64];
     int attempts;
 
-    int r = db_stream_row(DB_STORE_RESULT, c->get_expired_builds,
+    int r = db_stream_row(DB_STORE_RESULT, s,
                           DB_RESULT_INT(id),
                           DB_RESULT_STRING(project),
                           DB_RESULT_STRING(revision),
@@ -746,7 +755,7 @@ buildmaster_check_expired_builds(conn_t *c)
     } else {
       newstatus = "pending";
     }
-    if(!db_stmt_exec(c->restart_build, "si", newstatus, id)) {
+    if(!db_stmt_exec(db_stmt_get(c, SQL_RESTART_BUILD), "si", newstatus, id)) {
       do_commit = 1;
     }
   }

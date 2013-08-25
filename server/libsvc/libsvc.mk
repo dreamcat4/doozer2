@@ -15,4 +15,4 @@ libunixservice_SRCS += \
 	cfg.c \
 	urlshorten.c \
 	ctrlsock.c \
-
+	db.c \

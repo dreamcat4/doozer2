@@ -23,12 +23,13 @@
 #include "libsvc/misc.h"
 #include "libsvc/trace.h"
 #include "libsvc/cfg.h"
+#include "libsvc/db.h"
 
 #include "artifact_serve.h"
-#include "db.h"
 #include "doozer.h"
 #include "bsdiff.h"
 #include "project.h"
+#include "sql_statements.h"
 
 static pthread_mutex_t patch_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -182,7 +183,9 @@ send_patch(http_connection_t *hc, const char *oldsha1, const char *newsha1,
     // Make sure ''old'' file can be resolved before
     // we do anything else
 
-    if(db_stmt_exec(c->get_artifact_by_sha1, "s", oldsha1)) {
+    MYSQL_STMT *s = db_stmt_get(c, SQL_GET_ARTIFACT_BY_SHA1);
+
+    if(db_stmt_exec(s, "s", oldsha1)) {
       pthread_mutex_unlock(&patch_mutex);
       return 1;
     }
@@ -194,7 +197,7 @@ send_patch(http_connection_t *hc, const char *oldsha1, const char *newsha1,
     char type[128];
     char content_type[128];
     char content_encoding[128];
-    int r = db_stream_row(0, c->get_artifact_by_sha1,
+    int r = db_stream_row(0, s,
                           DB_RESULT_STRING(storage),
                           DB_RESULT_STRING(payload),
                           DB_RESULT_STRING(project),
@@ -204,7 +207,7 @@ send_patch(http_connection_t *hc, const char *oldsha1, const char *newsha1,
                           DB_RESULT_STRING(content_encoding),
                           NULL);
 
-    mysql_stmt_reset(c->get_artifact_by_sha1);
+    mysql_stmt_reset(s);
 
     if(r) {
       pthread_mutex_unlock(&patch_mutex);
@@ -289,7 +292,9 @@ send_artifact(http_connection_t *hc, const char *remain, void *opaque)
   if(c == NULL)
     return 500;
 
-  if(db_stmt_exec(c->get_artifact_by_sha1, "s", remain))
+  MYSQL_STMT *s = db_stmt_get(c, SQL_GET_ARTIFACT_BY_SHA1);
+
+  if(db_stmt_exec(s, "s", remain))
     return 500;
 
   char storage[32];
@@ -299,7 +304,7 @@ send_artifact(http_connection_t *hc, const char *remain, void *opaque)
   char type[128];
   char content_type[128];
   char content_encoding[128];
-  int r = db_stream_row(0, c->get_artifact_by_sha1,
+  int r = db_stream_row(0, s,
                         DB_RESULT_STRING(storage),
                         DB_RESULT_STRING(payload),
                         DB_RESULT_STRING(project),
@@ -309,7 +314,7 @@ send_artifact(http_connection_t *hc, const char *remain, void *opaque)
                         DB_RESULT_STRING(content_encoding),
                         NULL);
 
-  mysql_stmt_reset(c->get_artifact_by_sha1);
+  mysql_stmt_reset(s);
 
   switch(r) {
   case DB_ERR_OTHER:
@@ -370,7 +375,8 @@ send_artifact(http_connection_t *hc, const char *remain, void *opaque)
         case -1:
           return -1;
         case 0:
-          db_stmt_exec(c->incr_patchcount_by_sha1, "s", remain);
+          db_stmt_exec(db_stmt_get(c, SQL_INCREASE_PATCHCOUNT_BY_SHA1),
+                       "s", remain);
           return 0;
         default:
           break;
@@ -464,7 +470,7 @@ send_artifact(http_connection_t *hc, const char *remain, void *opaque)
     return 501;
   }
  count:
-  db_stmt_exec(c->incr_dlcount_by_sha1, "s", remain);
+  db_stmt_exec(db_stmt_get(c, SQL_INCREASE_DLCOUNT_BY_SHA1), "s", remain);
   return 0;
 }
 

@@ -13,11 +13,11 @@
 #include "libsvc/misc.h"
 #include "libsvc/htsmsg_json.h"
 #include "libsvc/trace.h"
+#include "libsvc/db.h"
 
 #include "releasemaker.h"
-#include "db.h"
 #include "git.h"
-
+#include "sql_statements.h"
 
 static void generate_update_tracks(project_t *p, struct build_queue *builds,
                                    struct target_queue *targets);
@@ -52,7 +52,9 @@ releasemaker_update_project(project_t *p)
   if(c == NULL)
     return DOOZER_ERROR_TRANSIENT;
 
-  if(db_stmt_exec(c->get_releases, "s", p->p_id))
+  MYSQL_STMT *s = db_stmt_get(c, SQL_GET_RELEASES);
+
+  if(db_stmt_exec(s, "s", p->p_id))
     return DOOZER_ERROR_TRANSIENT;
 
   TAILQ_INIT(&builds);
@@ -60,7 +62,7 @@ releasemaker_update_project(project_t *p)
   while(1) {
     b = alloca(sizeof(build_t));
 
-    int r = db_stream_row(0, c->get_releases,
+    int r = db_stream_row(0, s,
                           DB_RESULT_INT(b->b_id),
                           DB_RESULT_STRING(b->b_branch),
                           DB_RESULT_STRING(b->b_target),
@@ -74,13 +76,16 @@ releasemaker_update_project(project_t *p)
   }
 
   TAILQ_FOREACH(b, &builds, b_global_link) {
-    if(db_stmt_exec(c->get_artifacts, "i", b->b_id))
+
+    MYSQL_STMT *s = db_stmt_get(c, SQL_GET_ARTIFACTS);
+
+    if(db_stmt_exec(s, "i", b->b_id))
       return DOOZER_ERROR_TRANSIENT;
 
     TAILQ_INIT(&b->b_artifacts);
     while(1) {
       artifact_t *a = alloca(sizeof(artifact_t));
-      int r = db_stream_row(0, c->get_artifacts,
+      int r = db_stream_row(0, s,
                             DB_RESULT_INT(a->a_id),
                             DB_RESULT_STRING(a->a_type),
                             DB_RESULT_STRING(a->a_sha1),

@@ -18,10 +18,9 @@
 #include "libsvc/irc.h"
 #include "libsvc/cfg.h"
 #include "libsvc/ctrlsock.h"
-
+#include "libsvc/db.h"
 
 #include "artifact_serve.h"
-#include "db.h"
 #include "doozer.h"
 #include "project.h"
 #include "buildmaster.h"

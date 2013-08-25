@@ -7,10 +7,10 @@
 #include "libsvc/misc.h"
 #include "libsvc/trace.h"
 #include "libsvc/cfg.h"
+#include "libsvc/db.h"
 
 #include "github.h"
 #include "project.h"
-#include "db.h"
 #include "restapi.h"
 #include "git.h"
 

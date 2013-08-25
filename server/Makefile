@@ -37,7 +37,6 @@ LDFLAGS += -lssl -lbz2
 
 SRCS =  src/main.c \
 	src/artifact_serve.c \
-	src/db.c \
 	src/project.c \
 	src/buildmaster.c \
 	src/git.c \
