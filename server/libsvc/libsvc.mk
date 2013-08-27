@@ -16,3 +16,4 @@ libunixservice_SRCS += \
 	urlshorten.c \
 	ctrlsock.c \
 	db.c \
+	cmd.c \

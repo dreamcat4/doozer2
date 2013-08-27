@@ -432,3 +432,28 @@ mutex_unlock_ptr(pthread_mutex_t **p)
 }
 
 
+/*
+ * Split a string in components delimited by 'delimiter'
+ */
+int
+str_tokenize(char *buf, char **vec, int vecsize, int delimiter)
+{
+  int n = 0;
+
+  while(1) {
+    while((*buf > 0 && *buf < 33) || *buf == delimiter)
+      buf++;
+    if(*buf == 0)
+      break;
+    vec[n++] = buf;
+    if(n == vecsize)
+      break;
+    while(*buf > 32 && *buf != delimiter)
+      buf++;
+    if(*buf == 0)
+      break;
+    *buf = 0;
+    buf++;
+  }
+  return n;
+}

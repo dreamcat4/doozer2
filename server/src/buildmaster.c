@@ -14,6 +14,7 @@
 #include "libsvc/trace.h"
 #include "libsvc/urlshorten.h"
 #include "libsvc/db.h"
+#include "libsvc/cmd.h"
 
 #include "buildmaster.h"
 #include "git.h"
@@ -308,7 +309,7 @@ http_getjob(http_connection_t *hc, const char *remain, void *opaque)
   }
 
   char *targets[64];
-  int numtargets = http_tokenize(targetsarg, targets, 64, ',');
+  int numtargets = str_tokenize(targetsarg, targets, 64, ',');
   int fails = 0;
   time_t deadline = time(NULL) + longpolltimeout;
 
@@ -837,3 +838,35 @@ buildmaster_init(void)
   http_path_add("/buildmaster/report",   NULL, http_report);
   http_path_add("/buildmaster/hello",    NULL, http_hello);
 }
+
+
+static int
+buildmaster_cli_build(const char *user,
+                      int argc, char **argv, int *intv,
+                      void (*msg)(void *opaque, const char *fmt, ...),
+                      void *opaque)
+{
+  char reason[256];
+  snprintf(reason, sizeof(reason), "Requested by %s", user);
+  return buildmaster_add_build(argv[0], argv[1], argv[2],
+                               reason, msg, opaque);
+}
+
+CMD(buildmaster_cli_build,
+    CMD_LITERAL("build"),
+    CMD_VARSTR("project"),
+    CMD_VARSTR("branch | revision"),
+    CMD_VARSTR("target"));
+
+static int
+buildmaster_status(const char *user,
+                      int argc, char **argv, int *intv,
+                      void (*msg)(void *opaque, const char *fmt, ...),
+                      void *opaque)
+{
+  msg(opaque, "The status is awesome");
+  return 0;
+}
+CMD(buildmaster_status,
+    CMD_LITERAL("show"),
+    CMD_LITERAL("status"));

@@ -361,7 +361,7 @@ send_artifact(http_connection_t *hc, const char *remain, void *opaque)
     char *ae = http_arg_get(&hc->hc_args, "Accept-Encoding");
 
     if(ae != NULL) {
-      nencodings = http_tokenize(ae, encodings, 16, ',');
+      nencodings = str_tokenize(ae, encodings, 16, ',');
       for(int i = 0; i < nencodings; i++) {
 
         char *x = strchr(encodings[i], ';');

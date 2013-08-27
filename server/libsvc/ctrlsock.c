@@ -12,13 +12,8 @@
 
 #include "htsbuf.h"
 #include "trace.h"
-
 #include "ctrlsock.h"
-
-int cmd_exec(const char *line, const char *user,
-             void (*msg)(void *opaque, const char *fmt, ...),
-             void *opaque);
-
+#include "cmd.h"
 
 static int ctrlsock_fd;
 
@@ -65,15 +60,19 @@ parse_line(int fd, const char *str, const char *user)
   char tmp[32];
   switch(*str) {
 
-  case 'X':
+  case 'X': // Execute
     rval = cmd_exec(str + 1, user, &output_callback, &fd);
-    int l = snprintf(tmp, sizeof(tmp), "%d\n", rval);
+    break;
 
-    return write(fd, tmp, l) != l;
+  case 'C': // Complete
+    rval = cmd_complete(str + 1, user, &output_callback, &fd);
+    break;
 
   default:
     return 1;
   }
+  int l = snprintf(tmp, sizeof(tmp), "%d\n", rval);
+  return write(fd, tmp, l) != l;
 }
 
 

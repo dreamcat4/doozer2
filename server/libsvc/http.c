@@ -426,7 +426,7 @@ http_cmd_post(http_connection_t *hc, htsbuf_queue_t *spill)
     http_error(hc, HTTP_STATUS_BAD_REQUEST);
     return 0;
   }
-  n = http_tokenize(v, argv, 2, ';');
+  n = str_tokenize(v, argv, 2, ';');
   if(n == 0) {
     http_error(hc, HTTP_STATUS_BAD_REQUEST);
     return 0;
@@ -501,10 +501,10 @@ process_request(http_connection_t *hc, htsbuf_queue_t *spill)
 
   /* Extract authorization */
   if((v = http_arg_get(&hc->hc_args, "Authorization")) != NULL) {
-    if((n = http_tokenize(v, argv, 2, -1)) == 2) {
+    if((n = str_tokenize(v, argv, 2, -1)) == 2) {
       n = base64_decode(authbuf, argv[1], sizeof(authbuf) - 1);
       authbuf[n] = 0;
-      if((n = http_tokenize((char *)authbuf, argv, 2, ':')) == 2) {
+      if((n = str_tokenize((char *)authbuf, argv, 2, ':')) == 2) {
 	hc->hc_username = strdup(argv[0]);
 	hc->hc_password = strdup(argv[1]);
       }
@@ -593,33 +593,6 @@ http_arg_set(struct http_arg_list *list, const char *key,
   TAILQ_INSERT_TAIL(list, ra, link);
   ra->key = strdup(key);
   ra->val = strdup(val);
-}
-
-
-/*
- * Split a string in components delimited by 'delimiter'
- */
-int
-http_tokenize(char *buf, char **vec, int vecsize, int delimiter)
-{
-  int n = 0;
-
-  while(1) {
-    while((*buf > 0 && *buf < 33) || *buf == delimiter)
-      buf++;
-    if(*buf == 0)
-      break;
-    vec[n++] = buf;
-    if(n == vecsize)
-      break;
-    while(*buf > 32 && *buf != delimiter)
-      buf++;
-    if(*buf == 0)
-      break;
-    *buf = 0;
-    buf++;
-  }
-  return n;
 }
 
 
@@ -747,7 +720,7 @@ http_serve_requests(http_connection_t *hc, htsbuf_queue_t *spill)
     if(tracehttp)
       trace(LOG_DEBUG, "HTTP: %s", cmdline);
 
-    if((n = http_tokenize(cmdline, argv, 3, -1)) != 3) {
+    if((n = str_tokenize(cmdline, argv, 3, -1)) != 3) {
       return;
     }
 
@@ -773,7 +746,7 @@ http_serve_requests(http_connection_t *hc, htsbuf_queue_t *spill)
 	break; /* header complete */
       }
 
-      if((n = http_tokenize(hdrline, argv, 2, -1)) < 2)
+      if((n = str_tokenize(hdrline, argv, 2, -1)) < 2)
 	continue;
 
       if((c = strrchr(argv[0], ':')) == NULL)

@@ -19,6 +19,7 @@
 #include "libsvc/cfg.h"
 #include "libsvc/ctrlsock.h"
 #include "libsvc/db.h"
+#include "libsvc/cmd.h"
 
 #include "artifact_serve.h"
 #include "doozer.h"

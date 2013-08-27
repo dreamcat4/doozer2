@@ -107,8 +107,6 @@ int http_arg_get_int(struct http_arg_list *list, const char *name,
 void http_arg_set(struct http_arg_list *list,
                   const char *key, const char *val);
 
-int http_tokenize(char *buf, char **vec, int vecsize, int delimiter);
-
 void http_error(http_connection_t *hc, int error);
 
 int http_output_html(http_connection_t *hc);
