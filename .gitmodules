@@ -1,3 +1,6 @@
 [submodule "server/libgit2"]
 	path = server/libgit2
 	url = git://github.com/libgit2/libgit2.git
+[submodule "libsvc"]
+	path = libsvc
+	url = git://github.com/andoma/libsvc.git
