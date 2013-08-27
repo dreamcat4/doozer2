@@ -1,5 +1,5 @@
-[submodule "server/libgit2"]
-	path = server/libgit2
+[submodule "libgit2"]
+	path = libgit2
 	url = git://github.com/libgit2/libgit2.git
 [submodule "libsvc"]
 	path = libsvc
