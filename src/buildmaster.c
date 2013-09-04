@@ -842,7 +842,7 @@ buildmaster_init(void)
 
 static int
 buildmaster_cli_build(const char *user,
-                      int argc, char **argv, int *intv,
+                      int argc, const char **argv, int *intv,
                       void (*msg)(void *opaque, const char *fmt, ...),
                       void *opaque)
 {
@@ -857,16 +857,3 @@ CMD(buildmaster_cli_build,
     CMD_VARSTR("project"),
     CMD_VARSTR("branch | revision"),
     CMD_VARSTR("target"));
-
-static int
-buildmaster_status(const char *user,
-                      int argc, char **argv, int *intv,
-                      void (*msg)(void *opaque, const char *fmt, ...),
-                      void *opaque)
-{
-  msg(opaque, "The status is awesome");
-  return 0;
-}
-CMD(buildmaster_status,
-    CMD_LITERAL("show"),
-    CMD_LITERAL("status"));
