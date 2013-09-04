@@ -491,7 +491,7 @@ http_artifact(http_connection_t *hc, const char *remain, void *opaque)
   if(pc == NULL)
     return 410;
 
-  s = db_stmt_get(c, SQL_INSERT_BUILD);
+  s = db_stmt_get(c, SQL_INSERT_ARTIFACT);
 
   if(hc->hc_post_len > 16384 ||
      !strcmp(encoding ?: "", "gzip") ||
