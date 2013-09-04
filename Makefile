@@ -21,7 +21,7 @@ prefix ?= /usr/local
 
 BUILDDIR = ${CURDIR}/build
 
-PROG=${BUILDDIR}/doozer
+PROG=${BUILDDIR}/doozerd
 
 
 CFLAGS  += -Wall -Werror -Wwrite-strings -Wno-deprecated-declarations 
@@ -81,10 +81,10 @@ distclean: clean
 	rm -rf build.*
 
 install: ${PROG}
-	install -D ${PROG} "${prefix}/bin/doozer"
-
+	install -D ${PROG} "${prefix}/bin/doozerd"
+	install -D -m 755 doozer "${prefix}/bin/doozer"
 uninstall:
-	rm -f "${prefix}/bin/doozer"
+	rm -f "${prefix}/bin/doozerd" "${prefix}/bin/doozer"
 
 # Include dependency files if they exist.
 -include $(DEPS)
