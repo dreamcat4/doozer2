@@ -326,12 +326,20 @@ generate_update_tracks(project_t *p, struct build_queue *builds,
 
       htsmsg_add_msg(outtargets, NULL, out);
     }
-    htsmsg_t *outtrack = htsmsg_create_map();
-    htsmsg_add_str(outtrack, "name", tracktitle);
-    htsmsg_add_str(outtrack, "description", desc);
-    htsmsg_add_msg(outtrack, "targets", outtargets);
 
-    htsmsg_add_msg(outtracks, NULL, outtrack);
+    // If no description is set it wont be part of the all.json
+    // (ie, on download pages, etc)
+
+    if(desc == NULL) {
+      htsmsg_destroy(outtargets);
+    } else {
+      htsmsg_t *outtrack = htsmsg_create_map();
+      htsmsg_add_str(outtrack, "name", tracktitle);
+      htsmsg_add_str(outtrack, "description", desc);
+      htsmsg_add_msg(outtrack, "targets", outtargets);
+
+      htsmsg_add_msg(outtracks, NULL, outtrack);
+    }
   }
 
   char *json = htsmsg_json_serialize_to_str(outtracks, 1);
