@@ -129,16 +129,11 @@ do_send_file(http_connection_t *hc, const char *ct,
                    NULL, 0, NULL, NULL, NULL);
 
   if(!hc->hc_no_output) {
-    while(content_len > 0) {
-      int chunk = MIN(1024 * 1024 * 1024, content_len);
-      int r = sendfile(hc->hc_fd, fd, NULL, chunk);
-      if(r == -1) {
-        close(fd);
-        return -1;
-      }
-      content_len -= r;
+    if(tcp_sendfile(hc->hc_ts, fd, content_len)) {
+      return -1;
     }
   }
+
   close(fd);
   return 0;
 }
@@ -273,9 +268,7 @@ send_patch(http_connection_t *hc, const char *oldsha1, const char *newsha1,
     return 1;
   }
 
-  if(do_send_file(hc, ct, st.st_size, ce, fd))
-    return -1;
-  return 0;
+  return do_send_file(hc, ct, st.st_size, ce, fd);
 }
 
 
