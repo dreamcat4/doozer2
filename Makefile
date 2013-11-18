@@ -43,6 +43,7 @@ SRCS =  src/main.c \
 	src/releasemaker.c \
 	src/github.c \
 	src/restapi.c \
+	src/s3.c \
 
 SRCS += ${libunixservice_SRCS:%.c=libsvc/%.c}
 

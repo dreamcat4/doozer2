@@ -19,6 +19,7 @@
 #include "buildmaster.h"
 #include "git.h"
 #include "sql_statements.h"
+#include "s3.h"
 
 static int add_build(project_t *p, const char *branch, const char *revision,
                      const char *target, const char *reason, int no_output);
@@ -771,13 +772,130 @@ buildmaster_check_expired_builds(conn_t *c)
 /**
  *
  */
+static int
+delete_artifact(const char *name, const char *storage, const char *payload,
+                cfg_t *pc, char *errbuf, size_t errlen)
+{
+  if(!strcmp(storage, "embedded")) {
+    // Do nothing
+    return 0;
+  } else if(!strcmp(storage, "s3")) {
+
+
+
+    const char *bucket = cfg_get_str(pc, CFG("s3", "bucket"), NULL);
+    const char *secret = cfg_get_str(pc, CFG("s3", "secret"), NULL);
+    const char *awsid  = cfg_get_str(pc, CFG("s3", "awsid"),  NULL);
+
+
+    if(bucket == NULL || secret == NULL || awsid == NULL) {
+      snprintf(errbuf, errlen,
+               "Missing S3 config for project. Unable to delete file");
+      return -1;
+    }
+
+    return aws_s3_delete_file(bucket, awsid, secret, payload, errbuf, errlen);
+
+  } else if(!strcmp(storage, "file")) {
+
+    char path[PATH_MAX];
+    const char *basepath = cfg_get_str(pc, CFG("artifactPath"), NULL);
+    if(basepath == NULL) {
+      snprintf(errbuf, errlen, "Missing artifactPath in config");
+      return -1;
+    }
+    snprintf(path, sizeof(path), "%s/%s", basepath, payload);
+
+    if(unlink(path)) {
+      snprintf(errbuf, errlen, "Unable to unlink '%s' -- %s",
+               path, strerror(errno));
+      return -1;
+    }
+    return 0;
+  } else {
+    snprintf(errbuf, errlen, "Unknown storage type: %s", storage);
+    return 1;
+  }
+
+}
+
+
+
+/**
+ *
+ */
+static int
+buildmaster_check_deleted_artifacts(conn_t *c)
+{
+  if(db_begin(c))
+    return 0;
+
+  cfg_root(root);
+
+  MYSQL_STMT *s = db_stmt_get(c, SQL_GET_DELETED_ARTIFACTS);
+
+  if(db_stmt_exec(s, ""))
+    return 0;
+
+  int id;
+  char name[512];
+  char storage[64];
+  char payload[512];
+  char project[128];
+  char errbuf[512];
+
+  int r = db_stream_row(DB_STORE_RESULT, s,
+                        DB_RESULT_INT(id),
+                        DB_RESULT_STRING(name),
+                        DB_RESULT_STRING(storage),
+                        DB_RESULT_STRING(payload),
+                        DB_RESULT_STRING(project));
+
+  if(r) {
+    db_rollback(c);
+    return 0;
+  }
+
+  project_t *p = project_get(project);
+  project_cfg(pc, project);
+
+  r = delete_artifact(name, storage, payload, pc,
+                      errbuf, sizeof(errbuf));
+
+  if(!r)  {
+    plog(p, "artifact/deleted", "Deleted artifact %s %s:%s", name, storage,
+         !strcmp(storage, "embedded") ? "" : payload);
+    db_stmt_exec(db_stmt_get(c, SQL_DELETE_DELETED_ARTIFACT), "i", id);
+  } else {
+    plog(p, "artifact/error", "Failed to delete artifact %s %s:%s -- %s",
+         name, storage, !strcmp(storage, "embedded") ? "" : payload, errbuf);
+    db_stmt_exec(db_stmt_get(c, SQL_FAIL_DELETED_ARTIFACT), "si", errbuf, id);
+  }
+
+  db_commit(c);
+  return 1;
+}
+
+
+/**
+ *
+ */
 static void *
 buildmaster_periodic(void *aux)
 {
+  sleep(5);
   while(1) {
     conn_t *c = db_get_conn();
-    if(c != NULL)
-      buildmaster_check_expired_builds(c);
+    if(c == NULL) {
+      sleep(10);
+      continue;
+    }
+
+    if(buildmaster_check_deleted_artifacts(c)) {
+      usleep(250);
+      continue;
+    }
+    buildmaster_check_expired_builds(c);
     sleep(60);
   }
   return NULL;

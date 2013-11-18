@@ -70,6 +70,9 @@ cfg_t *project_get_cfg(const char *id);
  *   github                          - Github API entry
  *
  *   notify                          - Notifications
+ *
+ *   artifact                        - Various stuff related to artifacts
+ *
  */
 void plog(project_t *p, const char *context, const char *fmt, ...)
  __attribute__ ((format (printf, 3, 4)));

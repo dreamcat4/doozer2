@@ -27,3 +27,10 @@
 #define SQL_GET_RELEASES "SELECT id,branch,target,version,revision FROM build INNER JOIN (SELECT max(id) AS id FROM build WHERE status='done' AND project=? GROUP BY target,branch) latest USING (id)"
 
 #define SQL_GET_ARTIFACTS "SELECT id,type,sha1,size,name FROM artifact WHERE build_id = ?"
+
+#define SQL_GET_DELETED_ARTIFACTS "SELECT id,name,storage,payload,project FROM deleted_artifact WHERE error IS NULL LIMIT 1"
+
+#define SQL_DELETE_DELETED_ARTIFACT "DELETE FROM deleted_artifact WHERE id=?"
+
+#define SQL_FAIL_DELETED_ARTIFACT "UPDATE deleted_artifact SET error=? WHERE id=?"
+
