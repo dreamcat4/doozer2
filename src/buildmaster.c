@@ -15,6 +15,7 @@
 #include "libsvc/urlshorten.h"
 #include "libsvc/db.h"
 #include "libsvc/cmd.h"
+#include "libsvc/talloc.h"
 
 #include "buildmaster.h"
 #include "git.h"
@@ -885,6 +886,9 @@ buildmaster_periodic(void *aux)
 {
   sleep(5);
   while(1) {
+
+    talloc_cleanup();
+
     conn_t *c = db_get_conn();
     if(c == NULL) {
       sleep(10);

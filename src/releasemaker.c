@@ -1,3 +1,4 @@
+
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -14,6 +15,8 @@
 #include "libsvc/htsmsg_json.h"
 #include "libsvc/trace.h"
 #include "libsvc/db.h"
+#include "libsvc/talloc.h"
+#include "libsvc/cmd.h"
 
 #include "releasemaker.h"
 #include "git.h"
@@ -39,28 +42,24 @@ buildcmp(const build_t *a, const build_t *b)
  *
  */
 int
-releasemaker_update_project(project_t *p)
+releasemaker_list_builds(conn_t *c, project_t *p,
+                         struct build_queue *builds,
+                         struct target_queue *targets)
 {
-  conn_t *c = db_get_conn();
-  struct build_queue builds;
   build_t *b;
-  struct target_queue targets;
   target_t *t;
 
-  plog(p, "release/check", "Starting relesemaker check");
-
-  if(c == NULL)
-    return DOOZER_ERROR_TRANSIENT;
+  TAILQ_INIT(targets);
+  TAILQ_INIT(builds);
 
   MYSQL_STMT *s = db_stmt_get(c, SQL_GET_RELEASES);
 
   if(db_stmt_exec(s, "s", p->p_id))
     return DOOZER_ERROR_TRANSIENT;
 
-  TAILQ_INIT(&builds);
 
   while(1) {
-    b = alloca(sizeof(build_t));
+    b = talloc_malloc(sizeof(build_t));
 
     int r = db_stream_row(0, s,
                           DB_RESULT_INT(b->b_id),
@@ -72,10 +71,10 @@ releasemaker_update_project(project_t *p)
       return DOOZER_ERROR_TRANSIENT;
     if(r)
       break;
-    TAILQ_INSERT_SORTED(&builds, b, b_global_link, buildcmp);
+    TAILQ_INSERT_SORTED(builds, b, b_global_link, buildcmp);
   }
 
-  TAILQ_FOREACH(b, &builds, b_global_link) {
+  TAILQ_FOREACH(b, builds, b_global_link) {
 
     MYSQL_STMT *s = db_stmt_get(c, SQL_GET_ARTIFACTS);
 
@@ -84,7 +83,7 @@ releasemaker_update_project(project_t *p)
 
     TAILQ_INIT(&b->b_artifacts);
     while(1) {
-      artifact_t *a = alloca(sizeof(artifact_t));
+      artifact_t *a = talloc_malloc(sizeof(artifact_t));
       int r = db_stream_row(0, s,
                             DB_RESULT_INT(a->a_id),
                             DB_RESULT_STRING(a->a_type),
@@ -100,38 +99,44 @@ releasemaker_update_project(project_t *p)
   }
 
 
-  TAILQ_INIT(&targets);
 
-  TAILQ_FOREACH(b, &builds, b_global_link) {
-    TAILQ_FOREACH(t, &targets, t_link)
+  TAILQ_FOREACH(b, builds, b_global_link) {
+    TAILQ_FOREACH(t, targets, t_link)
       if(!strcmp(t->t_target, b->b_target))
         break;
 
     if(t == NULL) {
-      t = alloca(sizeof(target_t));
+      t = talloc_malloc(sizeof(target_t));
       strcpy(t->t_target, b->b_target);
-      TAILQ_INSERT_TAIL(&targets, t, t_link);
+      TAILQ_INSERT_TAIL(targets, t, t_link);
       TAILQ_INIT(&t->t_builds);
     }
     TAILQ_INSERT_TAIL(&t->t_builds, b, b_target_link);
   }
-
-#if 0
-  printf("Final list\n");
-  TAILQ_FOREACH(t, &targets, t_link) {
-    printf("  For %s\n", t->t_target);
-    TAILQ_FOREACH(b, &t->t_builds, b_target_link) {
-      printf("    %s from branch %s\n", b->b_version, b->b_branch);
-      artifact_t *a;
-      TAILQ_FOREACH(a, &b->b_artifacts, a_link) {
-        printf("      #%-5d %-8s %s %d bytes\n",
-               a->a_id, a->a_type, a->a_sha1, a->a_size);
-      }
-    }
-  }
-#endif
-  generate_update_tracks(p, &builds, &targets);
   return 0;
+}
+
+
+/**
+ *
+ */
+int
+releasemaker_update_project(project_t *p)
+{
+  struct build_queue builds;
+  struct target_queue targets;
+
+  plog(p, "release/check", "Starting relesemaker check");
+
+  conn_t *c = db_get_conn();
+
+  if(c == NULL)
+    return DOOZER_ERROR_TRANSIENT;
+
+  int r = releasemaker_list_builds(c, p, &builds, &targets);
+  if(!r)
+    generate_update_tracks(p, &builds, &targets);
+  return r;
 }
 
 
@@ -359,3 +364,180 @@ generate_update_tracks(project_t *p, struct build_queue *builds,
   free(json);
   htsmsg_destroy(outtracks);
 }
+
+
+static int
+show_builds(const char *user,
+            int argc, const char **argv, int *intv,
+            void (*msg)(void *opaque, const char *fmt, ...),
+            void *opaque)
+{
+  project_t *p = project_get(argv[0]);
+
+  if(p == NULL)
+    return 1;
+
+  conn_t *c = db_get_conn();
+
+  if(c == NULL)
+    return DOOZER_ERROR_TRANSIENT;
+
+  struct build_queue builds;
+  struct target_queue targets;
+  target_t *t;
+  build_t *b;
+
+  int r = releasemaker_list_builds(c, p, &builds, &targets);
+  if(r)
+    return r;
+
+  msg(opaque, "Active builds for %s", argv[0]);
+  TAILQ_FOREACH(t, &targets, t_link) {
+    msg(opaque, "  For %s", t->t_target);
+    TAILQ_FOREACH(b, &t->t_builds, b_target_link) {
+      msg(opaque, "    %s from branch %s (Build #%d)",
+          b->b_version, b->b_branch, b->b_id);
+      artifact_t *a;
+      TAILQ_FOREACH(a, &b->b_artifacts, a_link) {
+        msg(opaque, "      #%-5d %-8s %s %d bytes",
+               a->a_id, a->a_type, a->a_sha1, a->a_size);
+      }
+    }
+  }
+
+  return 0;
+}
+
+CMD(show_builds,
+    CMD_LITERAL("show"),
+    CMD_LITERAL("builds"),
+    CMD_VARSTR("project"));
+
+
+static int
+do_delete_builds(const char *user,
+                 int argc, const char **argv, int *intv,
+                 void (*msg)(void *opaque, const char *fmt, ...),
+                 void *opaque, int do_commit)
+{
+  const char *project = argv[0];
+  project_t *p = project_get(project);
+  const char *pfx = do_commit ? "Deleted " : "";
+  if(p == NULL)
+    return 1;
+
+  struct build_queue builds;
+  struct target_queue targets;
+  build_t *b;
+
+  int deprecated = 0;
+  const char *by_status = NULL;
+
+  if(!strcmp(argv[1], "deprecated")) {
+    deprecated = 1;
+  } else if(!strcmp(argv[1], "failed")) {
+    by_status = "failed";
+  } else if(!strcmp(argv[1], "pending")) {
+    by_status = "pending";
+  } else {
+    msg(opaque, "Unknown filter");
+    return 1;
+  }
+
+  conn_t *c = db_get_conn();
+
+  if(c == NULL)
+    return DOOZER_ERROR_TRANSIENT;
+
+  db_begin(c);
+
+
+  if(deprecated) {
+
+    int r = releasemaker_list_builds(c, p, &builds, &targets);
+    if(r) {
+      db_rollback(c);
+      return r;
+    }
+
+    htsbuf_queue_t hq;
+    htsbuf_queue_init(&hq, INT_MAX);
+
+    htsbuf_qprintf(&hq, "DELETE FROM build WHERE project=? AND status=? ");
+
+    if(TAILQ_FIRST(&builds) != NULL) {
+      htsbuf_qprintf(&hq, "AND id NOT IN (");
+      int p=0;
+      TAILQ_FOREACH(b, &builds, b_global_link) {
+        htsbuf_qprintf(&hq, "%s%d", p ? "," : "", b->b_id);
+        p = 1;
+      }
+      htsbuf_qprintf(&hq, ")");
+    }
+
+    char *x = htsbuf_to_string(&hq);
+
+    scoped_db_stmt(s, x);
+
+    if(db_stmt_exec(s, "ss", project, "done")) {
+      db_rollback(c);
+      return 1;
+    }
+
+    msg(opaque, "%s%d deprecated builds", pfx, mysql_stmt_affected_rows(s));
+
+    free(x);
+  }
+
+  if(by_status) {
+    MYSQL_STMT *s =
+      db_stmt_get(c,
+                  "DELETE from build WHERE project=? AND status=?");
+
+    if(db_stmt_exec(s, "ss", project, by_status)) {
+      db_rollback(c);
+      return DOOZER_ERROR_TRANSIENT;
+    }
+
+    msg(opaque, "%s%d %s builds",
+        pfx, (int)mysql_stmt_affected_rows(s), by_status);
+  }
+
+  if(do_commit)
+    db_commit(c);
+  else
+    db_rollback(c);
+
+  return 0;
+}
+
+static int
+delete_builds(const char *user,
+              int argc, const char **argv, int *intv,
+              void (*msg)(void *opaque, const char *fmt, ...),
+              void *opaque)
+{
+  return do_delete_builds(user, argc, argv, intv, msg, opaque, 1);
+}
+
+
+CMD(delete_builds,
+    CMD_LITERAL("delete"),
+    CMD_LITERAL("builds"),
+    CMD_VARSTR("project"),
+    CMD_VARSTR("deprecated | failed | pending"));
+
+static int
+count_delete_builds(const char *user,
+                    int argc, const char **argv, int *intv,
+                    void (*msg)(void *opaque, const char *fmt, ...),
+                    void *opaque)
+{
+  return do_delete_builds(user, argc, argv, intv, msg, opaque, 0);
+}
+
+CMD(count_delete_builds,
+    CMD_LITERAL("count"),
+    CMD_LITERAL("builds"),
+    CMD_VARSTR("project"),
+    CMD_VARSTR("deprecated | failed | pending"));

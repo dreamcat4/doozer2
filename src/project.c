@@ -14,6 +14,7 @@
 #include "libsvc/threading.h"
 #include "libsvc/irc.h"
 #include "libsvc/cfg.h"
+#include "libsvc/talloc.h"
 
 #include "doozer.h"
 #include "project.h"
@@ -188,6 +189,9 @@ project_worker(void *aux)
 
   pthread_mutex_lock(&projects_mutex);
   while(p->p_pending_jobs) {
+
+    talloc_cleanup();
+
     int pendings = p->p_pending_jobs;
     p->p_pending_jobs = 0;
     pthread_mutex_unlock(&projects_mutex);
@@ -228,6 +232,8 @@ project_thread(void *aux)
 {
   pthread_mutex_lock(&projects_mutex);
   while(1) {
+
+    talloc_cleanup();
 
     // If there are pending jobs for a project and no worker thread
     // we need to create a worker thread for it
