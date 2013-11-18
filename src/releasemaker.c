@@ -469,6 +469,8 @@ do_delete_builds(const char *user,
       htsbuf_qprintf(&hq, "AND id NOT IN (");
       int p=0;
       TAILQ_FOREACH(b, &builds, b_global_link) {
+        msg(opaque, "   Skipping active build #%-6d %-20s %-16s %-16s",
+            b->b_id, b->b_version, b->b_branch , b->b_target);
         htsbuf_qprintf(&hq, "%s%d", p ? "," : "", b->b_id);
         p = 1;
       }
