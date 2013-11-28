@@ -35,19 +35,19 @@ LDFLAGS += -L${BUILDDIR}/libgit2/lib -lgit2
 LDFLAGS += $(shell pkg-config --libs libcurl)
 LDFLAGS += -lssl -lbz2
 
-SRCS =  src/main.c \
-	src/artifact_serve.c \
-	src/project.c \
-	src/buildmaster.c \
-	src/git.c \
-	src/releasemaker.c \
-	src/github.c \
-	src/restapi.c \
-	src/s3.c \
+SRCS =  server/main.c \
+	server/artifact_serve.c \
+	server/project.c \
+	server/buildmaster.c \
+	server/git.c \
+	server/releasemaker.c \
+	server/github.c \
+	server/restapi.c \
+	server/s3.c \
 
 SRCS += ${libunixservice_SRCS:%.c=libsvc/%.c}
 
-SRCS += src/bsdiff.c
+SRCS += server/bsdiff.c
 
 # Various transformations
 SRCS  += $(SRCS-yes)
