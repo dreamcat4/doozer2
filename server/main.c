@@ -138,6 +138,11 @@ main(int argc, char **argv)
 
   db_init();
 
+  if(db_upgrade_schema("sql")) {
+    fprintf(stderr, "Unable to upgrade database schema. Giving up\n");
+    exit(1);
+  }
+
   artifact_serve_init();
 
   ctrlsock_init(ctrlsockpath);

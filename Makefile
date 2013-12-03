@@ -25,6 +25,7 @@ BUILDDIR = ${CURDIR}/build
 
 PROG=${BUILDDIR}/doozerd
 
+MKBUNDLE = $(CURDIR)/libsvc/mkbundle
 
 CFLAGS  += -Wall -Werror -Wwrite-strings -Wno-deprecated-declarations 
 CFLAGS  += -Wmissing-prototypes -std=gnu99
@@ -51,6 +52,8 @@ SRCS += ${libsvc_SRCS:%.c=libsvc/%.c}
 
 SRCS += server/bsdiff.c
 
+BUNDLES += sql
+
 # Various transformations
 SRCS  += $(SRCS-yes)
 DLIBS += $(DLIBS-yes)
@@ -58,6 +61,13 @@ SLIBS += $(SLIBS-yes)
 OBJS=    $(SRCS:%.c=$(BUILDDIR)/%.o)
 OBJS_EXTRA = $(SRCS_EXTRA:%.c=$(BUILDDIR)/%.so)
 DEPS=    ${OBJS:%.o=%.d}
+
+# File bundles
+BUNDLES += $(sort $(BUNDLES-yes))
+BUNDLE_SRCS=$(BUNDLES:%=$(BUILDDIR)/bundles/%.c)
+BUNDLE_DEPS=$(BUNDLE_SRCS:%.c=%.d)
+BUNDLE_OBJS=$(BUNDLE_SRCS:%.c=%.o)
+.PRECIOUS: ${BUNDLE_SRCS}
 
 # Common CFLAGS for all files
 CFLAGS_com  = -g -funsigned-char -O2 -D_FILE_OFFSET_BITS=64
@@ -68,13 +78,20 @@ all: ${PROG}
 
 .PHONY:	clean distclean
 
-${PROG}: $(OBJS) ${OBJS_EXTRA} Makefile
+${PROG}: $(OBJS) ${OBJS_EXTRA} $(BUNDLE_OBJS) $(ALLDEPS)
 	@mkdir -p $(dir $@)
-	$(CC) -o $@ $(OBJS) $(LDFLAGS) ${LDFLAGS_cfg}
+	$(CC) -o $@ $(OBJS) $(BUNDLE_OBJS) $(LDFLAGS) ${LDFLAGS_cfg}
 
-${BUILDDIR}/%.o: %.c Makefile ${BUILDDIR}/libgit2/include/git2.h
+${BUILDDIR}/%.o: %.c $(ALLDEPS) ${BUILDDIR}/libgit2/include/git2.h
 	@mkdir -p $(dir $@)
 	$(CC) -MD -MP $(CFLAGS_com) $(CFLAGS) -c -o $@ $(CURDIR)/$<
+
+$(BUILDDIR)/bundles/%.o: $(BUILDDIR)/bundles/%.c $(ALLDEPS)
+	$(CC) $(CFLAGS_com) -c -o $@ $<
+
+$(BUILDDIR)/bundles/%.c: % $(CURDIR)/libsvc/mkbundle $(ALLDEPS)
+	@mkdir -p $(dir $@)
+	$(MKBUNDLE) -o $@ -s $< -d  ${BUILDDIR}/bundles/$<.d -p $<
 
 clean:
 	rm -rf ${BUILDDIR}/src
