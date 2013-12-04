@@ -103,6 +103,7 @@ main(int argc, char **argv)
   sigset_t set;
   const char *cfgfile = NULL;
   const char *ctrlsockpath = "/tmp/doozerctrl";
+  const char *defconf = "server.json";
 
   signal(SIGPIPE, handle_sigpipe);
 
@@ -122,7 +123,7 @@ main(int argc, char **argv)
 
   srand48(getpid() ^ time(NULL));
 
-  if(cfg_load(cfgfile)) {
+  if(cfg_load(cfgfile, defconf)) {
     fprintf(stderr, "Unable to load config (check -c option). Giving up\n");
     exit(1);
   }
@@ -164,7 +165,7 @@ main(int argc, char **argv)
   while(running) {
     if(reload) {
       reload = 0;
-      if(!cfg_load(NULL)) {
+      if(!cfg_load(NULL, defconf)) {
         refresh_subsystems();
       }
     }

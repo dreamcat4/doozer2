@@ -15,6 +15,8 @@
 #  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+WITH_MYSQL := yes
+
 include libsvc/libsvc.mk
 
 prefix ?= /usr/local
@@ -45,7 +47,7 @@ SRCS =  server/main.c \
 	server/restapi.c \
 	server/s3.c \
 
-SRCS += ${libunixservice_SRCS:%.c=libsvc/%.c}
+SRCS += ${libsvc_SRCS:%.c=libsvc/%.c}
 
 SRCS += server/bsdiff.c
 

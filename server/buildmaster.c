@@ -287,8 +287,10 @@ http_getjob(http_connection_t *hc, const char *remain, void *opaque)
 {
   cfg_root(root);
 
-  const char *agent   = http_arg_get(&hc->hc_req_args, "agent");
-  const char *secret  = http_arg_get(&hc->hc_req_args, "secret");
+  const char *agent, *secret;
+  agent  = http_arg_get(&hc->hc_req_args, "agent")  ?: hc->hc_username;
+  secret = http_arg_get(&hc->hc_req_args, "secret") ?: hc->hc_password;
+
   char *targetsarg = http_arg_get(&hc->hc_req_args, "targets");
   if(agent == NULL || secret == NULL || targetsarg == NULL)
     return 400;
@@ -685,8 +687,10 @@ http_hello(http_connection_t *hc, const char *remain, void *opaque)
 {
   cfg_root(root);
 
-  const char *agent  = http_arg_get(&hc->hc_req_args, "agent");
-  const char *secret = http_arg_get(&hc->hc_req_args, "secret");
+  const char *agent, *secret;
+  agent  = http_arg_get(&hc->hc_req_args, "agent")  ?: hc->hc_username;
+  secret = http_arg_get(&hc->hc_req_args, "secret") ?: hc->hc_password;
+
   if(agent == NULL || secret == NULL)
     return 400;
 
