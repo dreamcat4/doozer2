@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <git2.h>
 #include <mysql.h>
+#include <gcrypt.h>
 
 #include "libsvc/htsmsg_json.h"
 
@@ -92,6 +93,7 @@ http_init(void)
     exit(1);
 }
 
+GCRY_THREAD_OPTION_PTHREAD_IMPL;
 
 /**
  *
@@ -99,11 +101,17 @@ http_init(void)
 int
 main(int argc, char **argv)
 {
-  int c;
+  int c, ret;
   sigset_t set;
   const char *cfgfile = NULL;
   const char *ctrlsockpath = "/tmp/doozerctrl";
   const char *defconf = "server.json";
+
+  ret = gcry_control(GCRYCTL_SET_THREAD_CBS, &gcry_threads_pthread);
+  if(ret) {
+    fprintf(stderr, "Unable to setup gcrypt for multitheraded mode\n");
+    exit(1);
+  }
 
   signal(SIGPIPE, handle_sigpipe);
 
