@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <limits.h>
 
 #include "doozer.h"
 #include "git.h"
@@ -103,6 +104,73 @@ progress_cb(const char *str, int len, void *data)
 /**
  *
  */
+static int
+cred_acquire_cb(git_cred **out,
+		const char *url,
+		const char *username_from_url,
+		unsigned int allowed_types,
+		void *payload)
+{
+  project_t *p = payload;
+
+  project_cfg(pc, p->p_id);
+  if(pc == NULL)
+    return -1;
+
+  const char *username = cfg_get_str(pc, CFG("gitrepo", "username"),
+				     username_from_url);
+
+  if(allowed_types & GIT_CREDTYPE_USERPASS_PLAINTEXT) {
+    const char *password = cfg_get_str(pc, CFG("gitrepo", "password"),
+				       NULL);
+    
+    if(password != NULL) {
+      plog(p, "git/repo", "Trying password authentication");
+      return git_cred_userpass_plaintext_new(out, username, password);
+    }
+  }
+
+
+  if(allowed_types & GIT_CREDTYPE_SSH_KEY) {
+
+    const char *home = getenv("HOME");
+    char buf_pub_path[PATH_MAX];
+    char buf_priv_path[PATH_MAX];
+    const char *priv_path = NULL;
+    const char *pub_path = NULL;
+
+    if(home != NULL) {
+      snprintf(buf_pub_path, PATH_MAX, "%s/.ssh/id_rsa.pub", home);
+      snprintf(buf_priv_path, PATH_MAX, "%s/.ssh/id_rsa", home);
+      if(!access(buf_pub_path, R_OK) && !access(buf_priv_path, R_OK)) {
+	pub_path  = buf_pub_path;
+	priv_path = buf_priv_path;
+      } else {
+	snprintf(buf_pub_path, PATH_MAX, "%s/.ssh/id_dsa.pub", home);
+	snprintf(buf_priv_path, PATH_MAX, "%s/.ssh/id_dsa", home);
+	if(!access(buf_pub_path, R_OK) && !access(buf_priv_path, R_OK)) {
+	  pub_path  = buf_pub_path;
+	  priv_path = buf_priv_path;
+	}
+      }
+    }
+
+    pub_path  = cfg_get_str(pc, CFG("gitrepo", "ssh", "pubPath"),  pub_path);
+    priv_path = cfg_get_str(pc, CFG("gitrepo", "ssh", "privPath"), priv_path);
+    const char *pw = cfg_get_str(pc, CFG("gitrepo", "ssh", "password"), NULL);
+
+    if(pub_path != NULL && priv_path != NULL) {
+      plog(p, "git/repo", "Trying SSH key authentication");
+      return git_cred_ssh_key_new(out, username, pub_path, priv_path, pw);
+    }
+  }
+  plog(p, "git/repo", "No available authentication methods");
+  return -1;
+}
+
+/**
+ *
+ */
 int
 git_repo_sync(project_t *p)
 {
@@ -141,6 +209,9 @@ git_repo_sync(project_t *p)
   callbacks.payload = p;
   if(isatty(1))
     callbacks.progress = &progress_cb;
+  
+  callbacks.credentials = &cred_acquire_cb;
+
   git_remote_set_callbacks(r, &callbacks);
   git_remote_set_autotag(r, GIT_REMOTE_DOWNLOAD_TAGS_AUTO);
 
