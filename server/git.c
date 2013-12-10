@@ -91,11 +91,12 @@ update_cb(const char *refname, const git_oid *a, const git_oid *b, void *data)
 /**
  *
  */
-static void
+static int
 progress_cb(const char *str, int len, void *data)
 {
   printf("remote: %.*s", len, str);
   fflush(stdout); /* We don't have the \n to force the flush */
+  return 0;
 }
 
 
@@ -149,7 +150,7 @@ git_repo_sync(project_t *p)
     goto done;
   }
 
-  if (git_remote_download(r, NULL, NULL) < 0) {
+  if (git_remote_download(r) < 0) {
     plog(p, "git/repo", "Unable to download from %s -- %s", upstream,
           giterr());
     goto disconnect;

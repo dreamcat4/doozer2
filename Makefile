@@ -36,7 +36,7 @@ LDFLAGS += -lpthread -lssl -lcrypto
 LDFLAGS += $(shell mysql_config --libs_r)
 LDFLAGS += -L${BUILDDIR}/libgit2/lib -lgit2
 LDFLAGS += $(shell pkg-config --libs libcurl)
-LDFLAGS += -lssl -lbz2
+LDFLAGS += -lssl -lbz2 -lrt -lssh2
 
 SRCS =  server/main.c \
 	server/artifact_serve.c \
