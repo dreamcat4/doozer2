@@ -15,28 +15,21 @@
 #  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+
 WITH_MYSQL := yes
-
-include libsvc/libsvc.mk
-
-prefix ?= /usr/local
 
 BUILDDIR = ${CURDIR}/build
 
+ALLDEPS += ${BUILDDIR}/libgit2/include/git2.h
+
 PROG=${BUILDDIR}/doozerd
 
-MKBUNDLE = $(CURDIR)/libsvc/mkbundle
-
-CFLAGS  += -Wall -Werror -Wwrite-strings -Wno-deprecated-declarations 
-CFLAGS  += -Wmissing-prototypes -std=gnu99
 CFLAGS  += $(shell mysql_config --cflags)
-CFLAGS  += $(shell pkg-config --cflags libcurl)
-
-LDFLAGS += -lpthread -lssl -lcrypto
 LDFLAGS += $(shell mysql_config --libs_r)
+
+CFLAGS += -I${BUILDDIR}/libgit2/include/
+
 LDFLAGS += -L${BUILDDIR}/libgit2/lib -lgit2
-LDFLAGS += $(shell pkg-config --libs libcurl)
-LDFLAGS += -lssl -lbz2 -lrt -lssh2
 
 SRCS =  server/main.c \
 	server/artifact_serve.c \
@@ -47,58 +40,8 @@ SRCS =  server/main.c \
 	server/github.c \
 	server/restapi.c \
 	server/s3.c \
+	server/bsdiff.c
 
-SRCS += ${libsvc_SRCS:%.c=libsvc/%.c}
-
-SRCS += server/bsdiff.c
-
-BUNDLES += sql
-
-# Various transformations
-SRCS  += $(SRCS-yes)
-DLIBS += $(DLIBS-yes)
-SLIBS += $(SLIBS-yes)
-OBJS=    $(SRCS:%.c=$(BUILDDIR)/%.o)
-OBJS_EXTRA = $(SRCS_EXTRA:%.c=$(BUILDDIR)/%.so)
-DEPS=    ${OBJS:%.o=%.d}
-
-# File bundles
-BUNDLES += $(sort $(BUNDLES-yes))
-BUNDLE_SRCS=$(BUNDLES:%=$(BUILDDIR)/bundles/%.c)
-BUNDLE_DEPS=$(BUNDLE_SRCS:%.c=%.d)
-BUNDLE_OBJS=$(BUNDLE_SRCS:%.c=%.o)
-.PRECIOUS: ${BUNDLE_SRCS}
-
-# Common CFLAGS for all files
-CFLAGS_com  = -g -funsigned-char -O2 -D_FILE_OFFSET_BITS=64
-CFLAGS_com += -I${BUILDDIR} -I${CURDIR}
-CFLAGS_com += -I${BUILDDIR}/libgit2/include/
-
-all: ${PROG}
-
-.PHONY:	clean distclean
-
-${PROG}: $(OBJS) ${OBJS_EXTRA} $(BUNDLE_OBJS) $(ALLDEPS)
-	@mkdir -p $(dir $@)
-	$(CC) -o $@ $(OBJS) $(BUNDLE_OBJS) $(LDFLAGS) ${LDFLAGS_cfg}
-
-${BUILDDIR}/%.o: %.c $(ALLDEPS) ${BUILDDIR}/libgit2/include/git2.h
-	@mkdir -p $(dir $@)
-	$(CC) -MD -MP $(CFLAGS_com) $(CFLAGS) -c -o $@ $(CURDIR)/$<
-
-$(BUILDDIR)/bundles/%.o: $(BUILDDIR)/bundles/%.c $(ALLDEPS)
-	$(CC) $(CFLAGS_com) -c -o $@ $<
-
-$(BUILDDIR)/bundles/%.c: % $(CURDIR)/libsvc/mkbundle $(ALLDEPS)
-	@mkdir -p $(dir $@)
-	$(MKBUNDLE) -o $@ -s $< -d  ${BUILDDIR}/bundles/$<.d -p $<
-
-clean:
-	rm -rf ${BUILDDIR}/src
-	find . -name "*~" | xargs rm -f
-
-distclean: clean
-	rm -rf build.*
 
 install: ${PROG}
 	install -D ${PROG} "${prefix}/bin/doozerd"
@@ -107,6 +50,8 @@ uninstall:
 	rm -f "${prefix}/bin/doozerd" "${prefix}/bin/doozer"
 
 # Include dependency files if they exist.
+include libsvc/libsvc.mk
+
 -include $(DEPS)
 
 ${BUILDDIR}/libgit2/include/git2.h:
