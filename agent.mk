@@ -15,66 +15,25 @@
 #  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-include libsvc/libsvc.mk
-
-prefix ?= /usr/local
 
 BUILDDIR = ${CURDIR}/build
 
 PROG=${BUILDDIR}/doozeragent
 
-CFLAGS  += -Wall -Werror -Wwrite-strings -Wno-deprecated-declarations
-CFLAGS  += -Wmissing-prototypes -std=gnu99
-CFLAGS  += $(shell pkg-config --cflags libcurl)
-
-LDFLAGS += -lpthread -lssl -lcrypto
-LDFLAGS += -L${BUILDDIR}/libgit2/lib -lgit2
-LDFLAGS += $(shell pkg-config --libs libcurl)
-LDFLAGS += -lssl -lbz2 -lm
+LDFLAGS += -L${BUILDDIR}/libgit2/lib -lgit2 -lm
 
 SRCS =  agent/main.c \
 	agent/agent.c \
 
-SRCS += ${libsvc_SRCS:%.c=libsvc/%.c}
+CFLAGS += -I${BUILDDIR}/libgit2/include/
 
-# Various transformations
-SRCS  += $(SRCS-yes)
-DLIBS += $(DLIBS-yes)
-SLIBS += $(SLIBS-yes)
-OBJS=    $(SRCS:%.c=$(BUILDDIR)/%.o)
-OBJS_EXTRA = $(SRCS_EXTRA:%.c=$(BUILDDIR)/%.so)
-DEPS=    ${OBJS:%.o=%.d}
-
-# Common CFLAGS for all files
-CFLAGS_com  = -g -funsigned-char -O2 -D_FILE_OFFSET_BITS=64
-CFLAGS_com += -I${BUILDDIR} -I${CURDIR}
-CFLAGS_com += -I${BUILDDIR}/libgit2/include/
-
-all: ${PROG}
-
-.PHONY:	clean distclean
-
-${PROG}: $(OBJS) ${OBJS_EXTRA} Makefile
-	@mkdir -p $(dir $@)
-	$(CC) -o $@ $(OBJS) $(LDFLAGS) ${LDFLAGS_cfg}
-
-${BUILDDIR}/%.o: %.c Makefile ${BUILDDIR}/libgit2/include/git2.h
-	@mkdir -p $(dir $@)
-	$(CC) -MD -MP $(CFLAGS_com) $(CFLAGS) -c -o $@ $(CURDIR)/$<
-
-clean:
-	rm -rf ${BUILDDIR}/src
-	find . -name "*~" | xargs rm -f
-
-distclean: clean
-	rm -rf build.*
 
 install: ${PROG}
 	install -D ${PROG} "${prefix}/bin/doozeragent"
 uninstall:
 	rm -f "${prefix}/bin/doozeragent"
 
-# Include dependency files if they exist.
+include libsvc/libsvc.mk
 -include $(DEPS)
 
 ${BUILDDIR}/libgit2/include/git2.h:
