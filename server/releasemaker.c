@@ -246,9 +246,9 @@ generate_update_tracks(project_t *p, struct build_queue *builds,
            trackid, t->t_target, b->b_branch, branchpattern);
 
 
-      cfg_t *artifacts_msg = cfg_get_list(target, "artifacts");
+      cfg_t *artifacts_cfg = cfg_get_list(target, "artifacts");
 
-      if(artifacts_msg == NULL) {
+      if(artifacts_cfg == NULL) {
         plog(p, logctx,
              "Manifest: Target %s: No artifacts configured", t_name);
         continue;
@@ -264,7 +264,7 @@ generate_update_tracks(project_t *p, struct build_queue *builds,
 
       htsmsg_t *artifacts = htsmsg_create_list();
       htsmsg_field_t *afield;
-      HTSMSG_FOREACH(afield, artifacts_msg) {
+      HTSMSG_FOREACH(afield, artifacts_cfg) {
         htsmsg_t *am = htsmsg_get_map_by_field(afield);
         const char *amtype = cfg_get_str(am, CFG("type"), NULL);
         if(amtype == NULL)
