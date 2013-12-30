@@ -33,7 +33,7 @@
 
 static pthread_mutex_t patch_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-#define TMPMEMSIZE (128 * 1024 * 1024)
+#define TMPMEMSIZE (1024 * 1024 * 1024)
 
 /**
  *
