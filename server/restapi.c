@@ -18,7 +18,7 @@
 #define API_ERROR   NULL
 
 #define BUILD_MSG_FIELDS "id,revision,target,version, " \
-  "branch,type,status,created, buildstart, buildend, status_change," \
+  "type,status,created, buildstart, buildend, status_change," \
   "agent,progress_text"
 
 /**
@@ -31,7 +31,6 @@ build_to_htsmsg(MYSQL_STMT *q)
   char revision[64];
   char target[64];
   char version[64];
-  char branch[128];
   char type[128];
   char status[128];
   time_t created;
@@ -45,7 +44,6 @@ build_to_htsmsg(MYSQL_STMT *q)
                         DB_RESULT_STRING(revision),
                         DB_RESULT_STRING(target),
                         DB_RESULT_STRING(version),
-                        DB_RESULT_STRING(branch),
                         DB_RESULT_STRING(type),
                         DB_RESULT_STRING(status),
                         DB_RESULT_TIME(created),
@@ -66,7 +64,6 @@ build_to_htsmsg(MYSQL_STMT *q)
   htsmsg_add_str(m, "revision",      revision);
   htsmsg_add_str(m, "target",        target);
   htsmsg_add_str(m, "version",       version);
-  htsmsg_add_str(m, "branch",        branch);
   htsmsg_add_str(m, "type",          type);
   htsmsg_add_str(m, "status",        status);
   if(created)
