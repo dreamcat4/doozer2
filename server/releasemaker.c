@@ -123,7 +123,8 @@ find_successful_build(releasemaker_t *rm, git_oid *start_oid,
 			      "FROM build "
 			      "WHERE revision=? "
 			      "AND project=? "
-			      "AND status=?");
+			      "AND status=? "
+                              "ORDER BY id DESC");
 
   int cnt = 0;
 
