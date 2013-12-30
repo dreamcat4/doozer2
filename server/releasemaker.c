@@ -511,7 +511,8 @@ releasemaker_update_project(project_t *p)
   if(pc == NULL)
     return DOOZER_ERROR_PERMANENT;
 
-  releasemaker_init(&rm, p, pc);
+  if(releasemaker_init(&rm, p, pc))
+    return DOOZER_ERROR_PERMANENT;
 
   int r = releasemaker_list_builds(&rm);
   if(!r)
@@ -539,7 +540,8 @@ show_builds(const char *user,
     return 1;
 
   releasemaker_t rm;
-  releasemaker_init(&rm, p, pc);
+  if(releasemaker_init(&rm, p, pc))
+    return DOOZER_ERROR_PERMANENT;
 
   int r = releasemaker_list_builds(&rm);
   if(r)
@@ -588,7 +590,8 @@ do_delete_builds(const char *user,
     return 1;
 
   releasemaker_t rm;
-  releasemaker_init(&rm, p, pc);
+  if(releasemaker_init(&rm, p, pc))
+    return 1;
 
   build_t *b;
 
