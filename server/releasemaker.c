@@ -17,64 +17,238 @@
 #include "libsvc/db.h"
 #include "libsvc/talloc.h"
 #include "libsvc/cmd.h"
+#include "libsvc/threading.h"
 
 #include "releasemaker.h"
 #include "git.h"
 #include "sql_statements.h"
 
-static void generate_update_tracks(project_t *p, struct build_queue *builds,
-                                   struct target_queue *targets);
+
+typedef struct releasemaker {
+  project_t *p;
+
+  cfg_t *rt_cfg;
+  cfg_t *tracks_cfg;
+  cfg_t *targets_cfg;
+  int num_targets;
+
+  struct build_queue builds;
+  struct target_queue targets;
+  
+  
+} releasemaker_t;
+
 
 /**
  *
  */
 static int
-buildcmp(const build_t *a, const build_t *b)
+releasemaker_init(releasemaker_t *rm, project_t *p, cfg_t *pc)
 {
-  int r = strcmp(a->b_target, b->b_target);
-  if(r)
-    return r;
-  return dictcmp(b->b_branch, a->b_branch);
+  TAILQ_INIT(&rm->builds);
+  TAILQ_INIT(&rm->targets);
+
+  rm->p = p;
+
+  rm->rt_cfg = cfg_get_map(pc, "releaseTracks");
+  if(rm->rt_cfg == NULL) {
+    plog(p, "release/info/all", "No releaseTracks configured");
+    return DOOZER_ERROR_PERMANENT;
+  }
+
+  rm->tracks_cfg = cfg_get_list(rm->rt_cfg, "tracks");
+  if(rm->tracks_cfg == NULL) {
+    plog(p, "release/info/all", "No tracks configured");
+    return DOOZER_ERROR_PERMANENT;
+  }
+
+  rm->targets_cfg = cfg_get_list(rm->rt_cfg, "targets");
+  if(rm->targets_cfg == NULL) {
+    plog(p, "release/info/all", "No targets configured");
+    return DOOZER_ERROR_PERMANENT;
+  }
+
+  rm->num_targets = cfg_list_length(rm->targets_cfg);
+
+  return 0;
 }
+
+
+/**
+ * Given a Git revision (OID) we walk the tree and try to find
+ * a successful build matching the revision
+ */
+static int
+find_successful_build(releasemaker_t *rm, git_oid *start_oid, 
+		      const char *branch)
+{
+  char oidtxt[41];
+  git_oid oid;
+  git_revwalk *walk;
+  project_t *p = rm->p;
+  conn_t *c = db_get_conn();
+  build_t *b;
+
+  if(c == NULL)
+    return DOOZER_ERROR_TRANSIENT;
+
+
+  struct build_queue tentative_builds;
+  TAILQ_INIT(&tentative_builds);
+
+  htsmsg_field_t *target_field;
+  HTSMSG_FOREACH(target_field, rm->targets_cfg) {
+    htsmsg_t *target_cfg = htsmsg_get_map_by_field(target_field);
+    if(target_cfg == NULL)
+      continue;
+    const char *t_name = cfg_get_str(target_cfg, CFG("target"), NULL);
+    if(t_name == NULL)
+      continue;
+
+    b = talloc_malloc(sizeof(build_t));
+    snprintf(b->b_target, sizeof(b->b_target), "%s", t_name);
+    snprintf(b->b_branch, sizeof(b->b_branch), "%s", branch);
+    TAILQ_INSERT_TAIL(&tentative_builds, b, b_global_link);
+  }
+
+
+  scoped_lock(&p->p_repo_mutex);
+  git_revwalk_new(&walk, p->p_repo);
+  git_revwalk_push(walk, start_oid);
+  git_revwalk_sorting(walk, GIT_SORT_TOPOLOGICAL);
+  oidtxt[40] = 0;
+
+  MYSQL_STMT *s = db_stmt_get(c,
+			      "SELECT id,target,version "
+			      "FROM build "
+			      "WHERE revision=? "
+			      "AND project=? "
+			      "AND status=?");
+
+  int cnt = 0;
+
+  while(!git_revwalk_next(&oid, walk)) {
+    cnt++;
+    if(cnt == 100)
+      break;
+
+    git_oid_fmt(oidtxt, &oid);
+    if(db_stmt_exec(s, "sss", oidtxt, p->p_id, "done"))
+      goto bad;
+
+    while(1) {
+      int id;
+      char target[64];
+      char version[64];
+
+      int r = db_stream_row(0, s, 
+			    DB_RESULT_INT(id),
+			    DB_RESULT_STRING(target),
+			    DB_RESULT_STRING(version));
+      if(r < 0) 
+	goto bad;
+
+      if(r)
+	break;
+
+      TAILQ_FOREACH(b, &tentative_builds, b_global_link) {
+	if(!strcmp(b->b_target, target))
+	  break;
+      }
+
+      if(b != NULL) {
+	b->b_id = id;
+	strcpy(b->b_revision, oidtxt);
+	strcpy(b->b_version, version);
+	TAILQ_REMOVE(&tentative_builds, b, b_global_link);
+	TAILQ_INSERT_TAIL(&rm->builds, b, b_global_link);
+      }
+    }
+
+    if(TAILQ_FIRST(&tentative_builds) == NULL)
+      break;
+  }
+
+  TAILQ_FOREACH(b, &tentative_builds, b_global_link) {
+    char logctx[100];
+    snprintf(logctx, sizeof(logctx), "release/info/%s", b->b_target);
+    plog(rm->p, logctx, "No build for target %s in %s", b->b_target,
+	 branch);
+  }
+
+  git_revwalk_free(walk);
+  return 0;
+ bad:
+  git_revwalk_free(walk);
+  return DOOZER_ERROR_TRANSIENT;
+}
+
+
+
+/**
+ * This function tries to, for each configured branch, find a
+ * successful build with as high revision (as close to the branch ref)
+ * as possible.
+ */
+static int
+find_successful_builds(releasemaker_t *rm)
+{
+  struct ref_list refs;
+  ref_t *r;
+
+  /**
+   * git_repo_list_branches() returns the ref names in descending
+   * dictionary order (so 4.3 comes before 4.1, etc)
+   */
+
+  git_repo_list_branches(rm->p, &refs);
+
+  htsmsg_field_t *f;
+  HTSMSG_FOREACH(f, rm->tracks_cfg) {
+    htsmsg_t *m = htsmsg_get_map_by_field(f);
+    if(m == NULL)
+      continue;
+
+    const char *pattern = htsmsg_get_str(m, "branch");
+    if(pattern == NULL)
+      continue;
+
+    LIST_FOREACH(r, &refs, link) {
+      if(!fnmatch(pattern, r->name, FNM_PATHNAME))
+	break;
+    }
+
+    if(r == NULL) {
+      plog(rm->p, "release/info/all", "No matching ref for branch pattern %s",
+	   pattern);
+      continue;
+    }
+    find_successful_build(rm, &r->oid, r->name);
+  }
+  git_repo_free_refs(&refs);
+  return 0;
+}
+
+
 
 
 /**
  *
  */
-int
-releasemaker_list_builds(conn_t *c, project_t *p,
-                         struct build_queue *builds,
-                         struct target_queue *targets)
+static int
+releasemaker_list_builds(releasemaker_t *rm)
 {
   build_t *b;
   target_t *t;
 
-  TAILQ_INIT(targets);
-  TAILQ_INIT(builds);
+  find_successful_builds(rm);
 
-  MYSQL_STMT *s = db_stmt_get(c, SQL_GET_RELEASES);
+  conn_t *c = db_get_conn();
 
-  if(db_stmt_exec(s, "s", p->p_id))
+  if(c == NULL)
     return DOOZER_ERROR_TRANSIENT;
 
-
-  while(1) {
-    b = talloc_malloc(sizeof(build_t));
-
-    int r = db_stream_row(0, s,
-                          DB_RESULT_INT(b->b_id),
-                          DB_RESULT_STRING(b->b_branch),
-                          DB_RESULT_STRING(b->b_target),
-                          DB_RESULT_STRING(b->b_version),
-                          DB_RESULT_STRING(b->b_revision));
-    if(r < 0)
-      return DOOZER_ERROR_TRANSIENT;
-    if(r)
-      break;
-    TAILQ_INSERT_SORTED(builds, b, b_global_link, buildcmp);
-  }
-
-  TAILQ_FOREACH(b, builds, b_global_link) {
+  TAILQ_FOREACH(b, &rm->builds, b_global_link) {
 
     MYSQL_STMT *s = db_stmt_get(c, SQL_GET_ARTIFACTS);
 
@@ -100,15 +274,15 @@ releasemaker_list_builds(conn_t *c, project_t *p,
 
 
 
-  TAILQ_FOREACH(b, builds, b_global_link) {
-    TAILQ_FOREACH(t, targets, t_link)
+  TAILQ_FOREACH(b, &rm->builds, b_global_link) {
+    TAILQ_FOREACH(t, &rm->targets, t_link)
       if(!strcmp(t->t_target, b->b_target))
         break;
 
     if(t == NULL) {
       t = talloc_malloc(sizeof(target_t));
       strcpy(t->t_target, b->b_target);
-      TAILQ_INSERT_TAIL(targets, t, t_link);
+      TAILQ_INSERT_TAIL(&rm->targets, t, t_link);
       TAILQ_INIT(&t->t_builds);
     }
     TAILQ_INSERT_TAIL(&t->t_builds, b, b_target_link);
@@ -120,70 +294,27 @@ releasemaker_list_builds(conn_t *c, project_t *p,
 /**
  *
  */
-int
-releasemaker_update_project(project_t *p)
-{
-  struct build_queue builds;
-  struct target_queue targets;
-
-  plog(p, "release/check", "Starting relesemaker check");
-
-  conn_t *c = db_get_conn();
-
-  if(c == NULL)
-    return DOOZER_ERROR_TRANSIENT;
-
-  int r = releasemaker_list_builds(c, p, &builds, &targets);
-  if(!r)
-    generate_update_tracks(p, &builds, &targets);
-  return r;
-}
-
-
-/**
- *
- */
 static void
-generate_update_tracks(project_t *p, struct build_queue *builds,
-                       struct target_queue *targets)
+generate_update_tracks(releasemaker_t *rm)
 {
   char path[PATH_MAX];
   build_t *b;
   artifact_t *a;
   target_t *t;
   char logctx[128];
+  project_t *p = rm->p;
 
   cfg_root(root);
-  project_cfg(pc, p->p_id);
-  if(pc == NULL)
-    return;
 
   const char *baseurl = cfg_get_str(root, CFG("artifactPrefix"), NULL);
   if(baseurl == NULL) {
     plog(p, "release/info/all", "No artifactPrefix configured");
     return;
   }
-  cfg_t *rt = cfg_get_map(pc, "releaseTracks");
-  if(rt == NULL) {
-    plog(p, "release/info/all", "No releaseTracks configured");
-    return;
-  }
 
-  const char *outpath = cfg_get_str(rt, CFG("manifestDir"), NULL);
+  const char *outpath = cfg_get_str(rm->rt_cfg, CFG("manifestDir"), NULL);
   if(outpath == NULL) {
     plog(p, "release/info/all", "No manifestDir configured");
-    return;
-  }
-
-  cfg_t *targets_msg = cfg_get_list(rt, "targets");
-  if(targets_msg == NULL) {
-    plog(p, "release/info/all", "No targets configured");
-    return;
-  }
-
-  cfg_t *tracks = cfg_get_list(rt, "tracks");
-  if(tracks == NULL) {
-    plog(p, "release/info/all", "No tracks configured");
     return;
   }
 
@@ -193,22 +324,22 @@ generate_update_tracks(project_t *p, struct build_queue *builds,
 
   for(int i = 0; ; i++) {
     const char *trackid =
-      cfg_get_str(tracks, CFG(CFG_INDEX(i), "name"),   NULL);
+      cfg_get_str(rm->tracks_cfg, CFG(CFG_INDEX(i), "name"),   NULL);
     const char *tracktitle  =
-      cfg_get_str(tracks, CFG(CFG_INDEX(i), "title"),   NULL);
+      cfg_get_str(rm->tracks_cfg, CFG(CFG_INDEX(i), "title"),   NULL);
     const char *branchpattern =
-      cfg_get_str(tracks, CFG(CFG_INDEX(i), "branch"), NULL);
+      cfg_get_str(rm->tracks_cfg, CFG(CFG_INDEX(i), "branch"), NULL);
 
     if(trackid == NULL || branchpattern == NULL || tracktitle == NULL)
       break;
 
     const char *desc =
-      cfg_get_str(tracks, CFG(CFG_INDEX(i), "description"), NULL);
+      cfg_get_str(rm->tracks_cfg, CFG(CFG_INDEX(i), "description"), NULL);
 
     htsmsg_t *outtargets = htsmsg_create_list();
 
     htsmsg_field_t *tfield;
-    HTSMSG_FOREACH(tfield, targets_msg) {
+    HTSMSG_FOREACH(tfield, rm->targets_cfg) {
       htsmsg_t *target = htsmsg_get_map_by_field(tfield);
       if(target == NULL)
         continue;
@@ -220,7 +351,7 @@ generate_update_tracks(project_t *p, struct build_queue *builds,
 
       snprintf(logctx, sizeof(logctx), "release/info/%s", t_name);
 
-      TAILQ_FOREACH(t, targets, t_link)
+      TAILQ_FOREACH(t, &rm->targets, t_link)
         if(!strcmp(t->t_target, t_name))
           break;
 
@@ -366,6 +497,32 @@ generate_update_tracks(project_t *p, struct build_queue *builds,
 }
 
 
+/**
+ *
+ */
+int
+releasemaker_update_project(project_t *p)
+{
+  releasemaker_t rm;
+
+  plog(p, "release/check", "Starting relesemaker check");
+
+  project_cfg(pc, p->p_id);
+  if(pc == NULL)
+    return DOOZER_ERROR_PERMANENT;
+
+  releasemaker_init(&rm, p, pc);
+
+  int r = releasemaker_list_builds(&rm);
+  if(!r)
+    generate_update_tracks(&rm);
+  return r;
+}
+
+
+/**
+ *
+ */
 static int
 show_builds(const char *user,
             int argc, const char **argv, int *intv,
@@ -377,22 +534,22 @@ show_builds(const char *user,
   if(p == NULL)
     return 1;
 
-  conn_t *c = db_get_conn();
+  project_cfg(pc, p->p_id);
+  if(pc == NULL)
+    return 1;
 
-  if(c == NULL)
-    return DOOZER_ERROR_TRANSIENT;
+  releasemaker_t rm;
+  releasemaker_init(&rm, p, pc);
 
-  struct build_queue builds;
-  struct target_queue targets;
-  target_t *t;
-  build_t *b;
-
-  int r = releasemaker_list_builds(c, p, &builds, &targets);
+  int r = releasemaker_list_builds(&rm);
   if(r)
     return r;
 
+  target_t *t;
+  build_t *b;
+
   msg(opaque, "Active builds for %s", argv[0]);
-  TAILQ_FOREACH(t, &targets, t_link) {
+  TAILQ_FOREACH(t, &rm.targets, t_link) {
     msg(opaque, "  For %s", t->t_target);
     TAILQ_FOREACH(b, &t->t_builds, b_target_link) {
       msg(opaque, "    %s from branch %s (Build #%d)",
@@ -426,8 +583,13 @@ do_delete_builds(const char *user,
   if(p == NULL)
     return 1;
 
-  struct build_queue builds;
-  struct target_queue targets;
+  project_cfg(pc, p->p_id);
+  if(pc == NULL)
+    return 1;
+
+  releasemaker_t rm;
+  releasemaker_init(&rm, p, pc);
+
   build_t *b;
 
   int deprecated = 0;
@@ -454,7 +616,7 @@ do_delete_builds(const char *user,
 
   if(deprecated) {
 
-    int r = releasemaker_list_builds(c, p, &builds, &targets);
+    int r = releasemaker_list_builds(&rm);
     if(r) {
       db_rollback(c);
       return r;
@@ -465,10 +627,10 @@ do_delete_builds(const char *user,
 
     htsbuf_qprintf(&hq, "DELETE FROM build WHERE project=? AND status=? ");
 
-    if(TAILQ_FIRST(&builds) != NULL) {
+    if(TAILQ_FIRST(&rm.builds) != NULL) {
       htsbuf_qprintf(&hq, "AND id NOT IN (");
       int p=0;
-      TAILQ_FOREACH(b, &builds, b_global_link) {
+      TAILQ_FOREACH(b, &rm.builds, b_global_link) {
         msg(opaque, "   Skipping active build #%-6d %-20s %-16s %-16s",
             b->b_id, b->b_version, b->b_branch , b->b_target);
         htsbuf_qprintf(&hq, "%s%d", p ? "," : "", b->b_id);
@@ -543,3 +705,4 @@ CMD(count_delete_builds,
     CMD_LITERAL("builds"),
     CMD_VARSTR("project"),
     CMD_VARSTR("deprecated | failed | pending"));
+

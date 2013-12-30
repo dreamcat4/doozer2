@@ -200,6 +200,7 @@ project_worker(void *aux)
       if(!git_repo_sync(p)) {
         pendings |= PROJECT_JOB_CHECK_FOR_BUILDS;
         pendings |= PROJECT_JOB_NOTIFY_REPO_UPDATE;
+        pendings |= PROJECT_JOB_GENERATE_RELEASES;
       }
     }
 

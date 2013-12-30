@@ -42,6 +42,7 @@ SRCS =  server/main.c \
 	server/s3.c \
 	server/bsdiff.c
 
+BUNDLES += sql
 
 install: ${PROG}
 	install -D ${PROG} "${prefix}/bin/doozerd"

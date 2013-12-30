@@ -22,8 +22,8 @@
 #include "sql_statements.h"
 #include "s3.h"
 
-static int add_build(project_t *p, const char *branch, const char *revision,
-                     const char *target, const char *reason, int no_output);
+static int add_build(project_t *p, const char *revision,
+                     const char *target, const char *reason);
 
 
 /**
@@ -117,7 +117,7 @@ buildmaster_check_for_builds(project_t *p)
          b->name, b->oidtxt);
 
     MYSQL_STMT *s = db_stmt_get(c, SQL_GET_TARGETS_FOR_BUILD);
-    if(db_stmt_exec(s, "sss", b->oidtxt, p->p_id, b->name)) {
+    if(db_stmt_exec(s, "ss", b->oidtxt, p->p_id)) {
       retval = DOOZER_ERROR_TRANSIENT;
       break;
     }
@@ -150,9 +150,7 @@ buildmaster_check_for_builds(project_t *p)
       if(tmark[i])
         continue;
 
-      int no_output = cfg_get_int(bc, CFG("noOutput"), 0);
-      add_build(p, b->name, b->oidtxt, configured_target,
-                "Automatic build", no_output);
+      add_build(p, b->oidtxt, configured_target, "Automatic build");
     }
   }
   git_repo_free_refs(&refs);
@@ -164,10 +162,11 @@ buildmaster_check_for_builds(project_t *p)
  *
  */
 static int
-add_build(project_t *p, const char *branch, const char *revision,
-          const char *target, const char *reason, int no_output)
+add_build(project_t *p, const char *revision,
+          const char *target, const char *reason)
 {
   char ver[512];
+  int no_output = 0;
 
   if(git_describe(ver, sizeof(ver), p, revision, 1))
     return DOOZER_ERROR_PERMANENT;
@@ -177,13 +176,13 @@ add_build(project_t *p, const char *branch, const char *revision,
     return DOOZER_ERROR_TRANSIENT;
 
   plog(p, "build/queue",
-       "Enqueue build for %s (%s %.8s) on %s by '%s'%s",
-       ver, branch, revision, target, reason,
+       "Enqueue build for %s (%.8s) on %s by '%s'%s",
+       ver, revision, target, reason,
        no_output ? ", No artifacts will be stored" : "");
 
-  db_stmt_exec(db_stmt_get(c, SQL_INSERT_BUILD), "sssssssi",
+  db_stmt_exec(db_stmt_get(c, SQL_INSERT_BUILD), "ssssssi",
                p->p_id, revision, target, reason,
-               "pending", branch, ver, no_output);
+               "pending", ver, no_output);
   return 0;
 }
 
@@ -452,7 +451,6 @@ http_artifact(http_connection_t *hc, const char *remain, void *opaque)
   char jobsecret2[64];
   char status[64];
   char version[64];
-  char branch[128];
 
   int r = db_stream_row(0, s,
                         DB_RESULT_STRING(project),
@@ -462,8 +460,7 @@ http_artifact(http_connection_t *hc, const char *remain, void *opaque)
                         DB_RESULT_STRING(agent),
                         DB_RESULT_STRING(jobsecret2),
                         DB_RESULT_STRING(status),
-                        DB_RESULT_STRING(version),
-                        DB_RESULT_STRING(branch));
+                        DB_RESULT_STRING(version));
 
   mysql_stmt_reset(s);
 
@@ -614,7 +611,6 @@ http_report(http_connection_t *hc, const char *remain, void *opaque)
   char jobsecret2[64];
   char status[64];
   char version[64];
-  char branch[128];
 
   int r = db_stream_row(0, s,
                         DB_RESULT_STRING(project),
@@ -624,8 +620,7 @@ http_report(http_connection_t *hc, const char *remain, void *opaque)
                         DB_RESULT_STRING(agent),
                         DB_RESULT_STRING(jobsecret2),
                         DB_RESULT_STRING(status),
-                        DB_RESULT_STRING(version),
-                        DB_RESULT_STRING(branch));
+                        DB_RESULT_STRING(version));
 
   mysql_stmt_reset(s);
 
@@ -659,17 +654,17 @@ http_report(http_connection_t *hc, const char *remain, void *opaque)
   if(!strcmp(newstatus, "building")) {
     db_stmt_exec(db_stmt_get(c, SQL_BUILD_PROGRESS_UPDATE), "si", msg, jobid);
     plog(p, "build/status",
-         "Build #%d: %s in %s for %s status: %s", jobid, version, branch, target, msg);
+         "Build #%d: %s for %s status: %s", jobid, version, target, msg);
   } else if(!strcmp(newstatus, "failed")) {
     db_stmt_exec(db_stmt_get(c, SQL_BUILD_FINISHED), "ssi", "failed", msg, jobid);
     plog(p, "build/finalstatus",
-         COLOR_RED "Build #%d: "COLOR_OFF"%s "COLOR_RED"in "COLOR_OFF"%s "COLOR_RED"for "COLOR_OFF"%s "COLOR_RED"failed: %s %s",
-         jobid, version, branch, target, msg, url);
+         COLOR_RED "Build #%d: "COLOR_OFF"%s "COLOR_RED"for "COLOR_OFF"%s "COLOR_RED"failed: %s %s",
+         jobid, version, target, msg, url);
   } else if(!strcmp(newstatus, "done")) {
     db_stmt_exec(db_stmt_get(c, SQL_BUILD_FINISHED), "ssi", "done", NULL, jobid);
     plog(p, "build/finalstatus",
-         COLOR_GREEN "Build #%d: "COLOR_OFF"%s "COLOR_GREEN"in "COLOR_OFF"%s "COLOR_GREEN"for "COLOR_OFF"%s "COLOR_GREEN"completed %s",
-         jobid, version, branch, target, url);
+         COLOR_GREEN "Build #%d: "COLOR_OFF"%s "COLOR_GREEN"for "COLOR_OFF"%s "COLOR_GREEN"completed %s",
+         jobid, version, target, url);
     project_schedule_job(project_get(project), PROJECT_JOB_GENERATE_RELEASES);
   } else {
     return 400;
@@ -939,7 +934,7 @@ buildmaster_add_build(const char *project, const char *branch,
   }
 
 
-  if(add_build(p, branch, r->oidtxt, target, reason, 0)) {
+  if(add_build(p, r->oidtxt, target, reason)) {
     msg(opaque, "Failed to enqueue build");
     goto bad;
   }

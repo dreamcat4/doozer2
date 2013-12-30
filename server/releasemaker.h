@@ -34,7 +34,3 @@ typedef struct target {
 } target_t;
 
 int releasemaker_update_project(project_t *p);
-
-int releasemaker_list_builds(conn_t *c, project_t *p,
-                             struct build_queue *builds,
-                             struct target_queue *targets);

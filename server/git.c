@@ -6,6 +6,7 @@
 #include "doozer.h"
 #include "git.h"
 #include "libsvc/threading.h"
+#include "libsvc/misc.h"
 
 /**
  * Must be called with lock held
@@ -246,6 +247,16 @@ git_repo_sync(project_t *p)
 /**
  *
  */
+static int
+branchcmp(const ref_t *a, const ref_t *b)
+{
+  return dictcmp(b->name, a->name);
+}
+
+
+/**
+ *
+ */
 int
 git_repo_list_branches(project_t *p, struct ref_list *bl)
 {
@@ -261,7 +272,7 @@ git_repo_list_branches(project_t *p, struct ref_list *bl)
     b->name = strdup(git_reference_name(ref) + strlen("refs/heads/"));
     git_oid_cpy(&b->oid, git_reference_target(ref));
     git_oid_fmt(b->oidtxt, &b->oid);
-    LIST_INSERT_HEAD(bl, b, link);
+    LIST_INSERT_SORTED(bl, b, link, branchcmp);
     git_reference_free(ref);
   }
   git_reference_iterator_free(iter);
