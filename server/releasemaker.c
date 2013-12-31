@@ -386,15 +386,20 @@ generate_update_tracks(releasemaker_t *rm)
         continue;
       }
 
-      htsmsg_t *out = htsmsg_create_map();
+      htsmsg_t *out_single = htsmsg_create_map(); // For a single track+target
 
-      htsmsg_add_str(out, "arch",    b->b_target);
-      htsmsg_add_str(out, "title", t_title);
-      htsmsg_add_str(out, "version", b->b_version);
-      htsmsg_add_str(out, "branch",  b->b_branch);
+      htsmsg_add_str(out_single, "arch",    b->b_target);
+      htsmsg_add_str(out_single, "title",   t_title);
+      htsmsg_add_str(out_single, "version", b->b_version);
+      htsmsg_add_str(out_single, "branch",  b->b_branch);
 
+      int out_all_got_artifacts = 0;
 
-      htsmsg_t *artifacts = htsmsg_create_list();
+      htsmsg_t *out_all = htsmsg_copy(out_single); // For all.json
+
+      htsmsg_t *artifacts_single = htsmsg_create_list();
+      htsmsg_t *artifacts_all    = htsmsg_create_list();
+
       htsmsg_field_t *afield;
       HTSMSG_FOREACH(afield, artifacts_cfg) {
         htsmsg_t *am = htsmsg_get_map_by_field(afield);
@@ -415,15 +420,24 @@ generate_update_tracks(releasemaker_t *rm)
             htsmsg_add_u32(artifact, "size", a->a_size);
             snprintf(url, sizeof(url), "%s/file/%s", baseurl, a->a_sha1);
             htsmsg_add_str(artifact, "url", url);
-            if(amtitle != NULL)
+
+            // We only want to include artifacts with a title in all.json
+
+            htsmsg_add_msg(artifacts_single, NULL, htsmsg_copy(artifact));
+
+            if(amtitle != NULL) {
               htsmsg_add_str(artifact, "title", amtitle);
-            htsmsg_add_msg(artifacts, NULL, artifact);
+              htsmsg_add_msg(artifacts_all, NULL, artifact);
+              out_all_got_artifacts = 1;
+            } else {
+              htsmsg_destroy(artifact);
+            }
           }
         }
       }
-      htsmsg_add_msg(out, "artifacts", artifacts);
 
-      htsmsg_t *out2 = htsmsg_copy(out);
+      htsmsg_add_msg(out_single, "artifacts", artifacts_single);
+      htsmsg_add_msg(out_all,    "artifacts", artifacts_all);
 
       struct change_queue cq;
       if(!git_changelog(&cq, p, b->b_revision, 0, 100, 0, b->b_target)) {
@@ -435,12 +449,12 @@ generate_update_tracks(releasemaker_t *rm)
           htsmsg_add_str(e, "desc", c->msg);
           htsmsg_add_msg(changelog, NULL, e);
         }
-        htsmsg_add_msg(out2, "changelog", changelog);
+        htsmsg_add_msg(out_single, "changelog", changelog);
         git_changlog_free(&cq);
       }
 
-      char *json = htsmsg_json_serialize_to_str(out2, 1);
-      htsmsg_destroy(out2);
+      char *json = htsmsg_json_serialize_to_str(out_single, 1);
+      htsmsg_destroy(out_single);
 
       snprintf(path, sizeof(path), "%s/%s-%s.json",
                outpath, trackid, b->b_target);
@@ -461,7 +475,11 @@ generate_update_tracks(releasemaker_t *rm)
       }
       free(json);
 
-      htsmsg_add_msg(outtargets, NULL, out);
+      // Only add to all.json if the target had any artifacts at all
+
+      if(out_all_got_artifacts) {
+        htsmsg_add_msg(outtargets, NULL, out_all);
+      }
     }
 
     // If no description is set it wont be part of the all.json
