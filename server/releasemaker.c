@@ -471,7 +471,9 @@ generate_update_tracks(releasemaker_t *rm)
       htsmsg_destroy(outtargets);
     } else {
       htsmsg_t *outtrack = htsmsg_create_map();
-      htsmsg_add_str(outtrack, "name", tracktitle);
+      htsmsg_add_str(outtrack, "id", trackid);
+      htsmsg_add_str(outtrack, "name", tracktitle);  // Legacy
+      htsmsg_add_str(outtrack, "title", tracktitle);
       htsmsg_add_str(outtrack, "description", desc);
       htsmsg_add_msg(outtrack, "targets", outtargets);
 
