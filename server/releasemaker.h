@@ -20,10 +20,10 @@ typedef struct build {
   TAILQ_ENTRY(build) b_global_link;
   TAILQ_ENTRY(build) b_target_link;
   int b_id;
+  git_oid b_oid;
   char b_branch[64];
   char b_target[64];
   char b_version[64];
-  char b_revision[64];
   struct artifact_queue b_artifacts;
 } build_t;
 

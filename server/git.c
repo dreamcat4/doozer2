@@ -454,10 +454,10 @@ change_free(change_t *c)
  *
  */
 int
-git_changelog(struct change_queue *cq, project_t *p, const char *rev,
+git_changelog(struct change_queue *cq, project_t *p, const git_oid *start_oid,
               int offset, int count, int all, const char *target)
 {
-  git_oid start_oid, oid;
+  git_oid oid;
   int retval;
   char tchangelog[128];
   change_t *c;
@@ -466,9 +466,6 @@ git_changelog(struct change_queue *cq, project_t *p, const char *rev,
 
   if(count == 0)
     return 0;
-
-  if(git_oid_fromstr(&start_oid, rev))
-    return DOOZER_ERROR_PERMANENT;
 
   scoped_lock(&p->p_repo_mutex);
 
@@ -493,7 +490,7 @@ git_changelog(struct change_queue *cq, project_t *p, const char *rev,
 
   git_revwalk *walk;
   git_revwalk_new(&walk, p->p_repo);
-  git_revwalk_push(walk, &start_oid);
+  git_revwalk_push(walk, start_oid);
 
   git_revwalk_sorting(walk, GIT_SORT_TOPOLOGICAL);
 

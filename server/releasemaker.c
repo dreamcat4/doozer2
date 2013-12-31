@@ -40,6 +40,92 @@ typedef struct releasemaker {
 
 
 /**
+ * Given a project + commit OID and a target, open
+ * Manifests/<target>.json and return it
+ *
+ *
+ */
+static htsmsg_t *
+get_embedded_manifest(project_t *p, const char *target,
+                      const git_oid *oid, const char *logctx)
+{
+  git_tree *tree = NULL;
+  git_commit *commit = NULL;
+  git_object *manifests = NULL;
+  git_object *blob = NULL;
+  const git_tree_entry *e;
+
+  htsmsg_t *r = NULL;
+
+  scoped_lock(&p->p_repo_mutex);
+
+  if(git_commit_lookup(&commit, p->p_repo, oid)) {
+    plog(p, logctx, "Unable to lookup commit id when looking for manifest");
+    return NULL;
+  }
+
+  if(git_commit_tree(&tree, commit)) {
+    plog(p, logctx, "Unable to open git tree when looking for manifest");
+    goto cleanup;
+  }
+
+  if((e = git_tree_entry_byname(tree, "Manifests")) == NULL)  {
+    plog(p, logctx, "Manifests directory not found");
+    goto cleanup;
+  }
+
+  if(git_tree_entry_to_object(&manifests, p->p_repo, e)) {
+    plog(p, logctx, "Unable to lookup manifest tree object");
+    goto cleanup;
+  }
+
+  if(git_object_type(manifests) != GIT_OBJ_TREE) {
+    plog(p, logctx, "Manifests/ is not a tree object");
+    goto cleanup;
+  }
+
+  char filename[128];
+  snprintf(filename, sizeof(filename), "%s.json", target);
+
+  if((e = git_tree_entry_byname((git_tree *)manifests, filename)) == NULL)  {
+    plog(p, logctx, "%s not found", filename);
+    goto cleanup;
+  }
+
+  if(git_tree_entry_to_object(&blob, p->p_repo, e)) {
+    plog(p, logctx, "Unable to lookup %s object", filename);
+    goto cleanup;
+  }
+
+  if(git_object_type(blob) != GIT_OBJ_BLOB) {
+    plog(p, logctx, "%s is not a file", filename);
+    goto cleanup;
+  }
+
+
+  size_t size = git_blob_rawsize((git_blob *)blob);
+  char *data = talloc_malloc(size + 1);
+  memcpy(data, git_blob_rawcontent((git_blob *)blob), size);
+  data[size] = 0;
+
+  char errbuf[512];
+
+  r = htsmsg_json_deserialize(data, errbuf, sizeof(errbuf));
+  if(r == NULL)
+    plog(p, logctx, "Unable to decode JSON in '%s' -- %s", filename, errbuf);
+
+
+ cleanup:
+  git_object_free(blob);
+  git_object_free(manifests);
+  if(tree != NULL)
+    git_tree_free(tree);
+  if(commit != NULL)
+    git_commit_free(commit);
+  return r;
+}
+
+/**
  *
  */
 static int
@@ -159,7 +245,8 @@ find_successful_build(releasemaker_t *rm, git_oid *start_oid,
 
       if(b != NULL) {
 	b->b_id = id;
-	strcpy(b->b_revision, oidtxt);
+
+        git_oid_cpy(&b->b_oid, &oid);
 	strcpy(b->b_version, version);
 	TAILQ_REMOVE(&tentative_builds, b, b_global_link);
 	TAILQ_INSERT_TAIL(&rm->builds, b, b_global_link);
@@ -377,6 +464,7 @@ generate_update_tracks(releasemaker_t *rm)
            "ReleaseTrack: %s Target %s: Using branch '%s' for pattern '%s'",
            trackid, t->t_target, b->b_branch, branchpattern);
 
+      htsmsg_t *manifest = get_embedded_manifest(p, t_name, &b->b_oid, logctx);
 
       cfg_t *artifacts_cfg = cfg_get_list(target, "artifacts");
 
@@ -439,8 +527,13 @@ generate_update_tracks(releasemaker_t *rm)
       htsmsg_add_msg(out_single, "artifacts", artifacts_single);
       htsmsg_add_msg(out_all,    "artifacts", artifacts_all);
 
+      if(manifest != NULL) {
+        htsmsg_add_msg(out_single, "manifest", htsmsg_copy(manifest));
+        htsmsg_add_msg(out_all,    "manifest", manifest);
+      }
+
       struct change_queue cq;
-      if(!git_changelog(&cq, p, b->b_revision, 0, 100, 0, b->b_target)) {
+      if(!git_changelog(&cq, p, &b->b_oid, 0, 100, 0, b->b_target)) {
         htsmsg_t *changelog = htsmsg_create_list();
         change_t *c;
         TAILQ_FOREACH(c, &cq, link) {
