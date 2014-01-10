@@ -1,3 +1,4 @@
+#include <sys/param.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -196,13 +197,8 @@ project_worker(void *aux)
     p->p_pending_jobs = 0;
     pthread_mutex_unlock(&projects_mutex);
 
-    if(pendings & PROJECT_JOB_UPDATE_REPO) {
-      if(!git_repo_sync(p)) {
-        pendings |= PROJECT_JOB_CHECK_FOR_BUILDS;
-        pendings |= PROJECT_JOB_NOTIFY_REPO_UPDATE;
-        pendings |= PROJECT_JOB_GENERATE_RELEASES;
-      }
-    }
+    if(pendings & PROJECT_JOB_UPDATE_REPO)
+      git_repo_sync(p);
 
     if(pendings & PROJECT_JOB_NOTIFY_REPO_UPDATE)
       project_notify_repo_update(p);
@@ -232,20 +228,45 @@ static void *
 project_thread(void *aux)
 {
   pthread_mutex_lock(&projects_mutex);
+
+  time_t now;
+  int next_check;
+
   while(1) {
 
     talloc_cleanup();
+
+    next_check = INT32_MAX;
+    now = time(NULL);
 
     // If there are pending jobs for a project and no worker thread
     // we need to create a worker thread for it
     project_t *p;
     LIST_FOREACH(p, &projects, p_link) {
+
+      if(p->p_next_refresh) {
+
+        if(now >= p->p_next_refresh) {
+          p->p_pending_jobs |= PROJECT_JOB_UPDATE_REPO;
+          p->p_next_refresh = now + p->p_refresh_interval;
+        } else if(p->p_next_refresh) {
+          next_check = MIN(next_check, p->p_next_refresh);
+        }
+      }
       if(p->p_pending_jobs && !p->p_thread)
         break;
     }
 
     if(p == NULL) {
-      pthread_cond_wait(&projects_cond, &projects_mutex);
+
+      if(next_check != INT32_MAX) {
+        struct timespec ts;
+        ts.tv_sec = next_check;
+        ts.tv_nsec = 0;
+        pthread_cond_timedwait(&projects_cond, &projects_mutex, &ts);
+      } else {
+        pthread_cond_wait(&projects_cond, &projects_mutex);
+      }
       continue;
     }
 
@@ -382,9 +403,17 @@ project_load_conf(char *fname, const char *path)
   pc->pc_msg = m;
   htsmsg_retain(m);
 
-  project_init(fname, pc->pc_mtime != mtime);
+  project_t *p = project_init(fname, pc->pc_mtime != mtime);
 
   pc->pc_mtime = mtime;
+
+  p->p_refresh_interval =
+    cfg_get_int(pc->pc_msg, CFG("gitrepo", "refreshInterval"), 0);
+
+  if(p->p_refresh_interval)
+    p->p_next_refresh = time(NULL) + p->p_refresh_interval;
+  else
+    p->p_next_refresh = 0;
 
   trace(LOG_INFO, "%s: Config loaded", fname);
 }

@@ -32,6 +32,12 @@ typedef struct project {
   pthread_mutex_t p_repo_mutex;
   git_repository *p_repo;
 
+  // --------------------------------------------------
+  // -- GIT Repo refresh time -------------------------
+
+  int p_refresh_interval;
+  time_t p_next_refresh;
+
 } project_t;
 
 project_t *project_get(const char *id);

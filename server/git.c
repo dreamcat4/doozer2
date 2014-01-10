@@ -87,6 +87,10 @@ update_cb(const char *refname, const git_oid *a, const git_oid *b, void *data)
          a_str, b_str, refname);
   }
 
+  project_schedule_job(p,
+                       PROJECT_JOB_CHECK_FOR_BUILDS |
+                       PROJECT_JOB_NOTIFY_REPO_UPDATE |
+                       PROJECT_JOB_GENERATE_RELEASES);
   return 0;
 }
 
