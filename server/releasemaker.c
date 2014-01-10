@@ -618,7 +618,7 @@ generate_update_tracks(releasemaker_t *rm)
         snprintf(logctx, sizeof(logctx), "release/publish/%s",
                  b->b_target);
         plog(p, logctx,
-             COLOR_GREEN "New %s release '%s' available for %s",
+             COLOR_GREEN "%s release '%s' available for %s",
              tracktitle, b->b_version, b->b_target);
       }
 
@@ -656,7 +656,7 @@ generate_update_tracks(releasemaker_t *rm)
     plog(p, "release/info/all",
          "Unable to write updatemanifest file -- %s", strerror(err));
   } else {
-    plog(p, "release/info/all", "New release manifest generated");
+    plog(p, "release/info/all", "Release manifest generated");
   }
 }
 
