@@ -517,7 +517,7 @@ http_artifact(http_connection_t *hc, int argc, char **argv, int flags)
     }
 
     char redir_path[128];
-    snprintf(redir_path, sizeof(redir_path), "files/%s", sha1sum);
+    snprintf(redir_path, sizeof(redir_path), "file/%s", sha1sum);
 
     int expire = time(NULL) + 300;
     char sigstr[512];
