@@ -456,7 +456,7 @@ send_artifact(http_connection_t *hc, const char *remain, void *opaque)
              "https://%s.s3.amazonaws.com/%s?Signature=%s&Expires=%ld"
              "&AWSAccessKeyId=%s",
              bucket, payload, sig, expire, awsid);
-    http_redirect(hc, location);
+    http_redirect(hc, location, HTTP_STATUS_FOUND);
 
 
   } else {

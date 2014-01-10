@@ -8,6 +8,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <openssl/hmac.h>
 
 #include "libsvc/http.h"
 #include "libsvc/misc.h"
@@ -403,7 +404,7 @@ http_getjob(http_connection_t *hc, const char *remain, void *opaque)
  *
  */
 static int
-http_artifact(http_connection_t *hc, const char *remain, void *opaque)
+http_artifact(http_connection_t *hc, int argc, char **argv, int flags)
 {
   const char *jobidstr  = http_arg_get(&hc->hc_req_args, "jobid");
   const char *jobsecret = http_arg_get(&hc->hc_req_args, "jobsecret");
@@ -494,19 +495,81 @@ http_artifact(http_connection_t *hc, const char *remain, void *opaque)
 
   s = db_stmt_get(c, SQL_INSERT_ARTIFACT);
 
+  const char *storage = cfg_get_str(pc, CFG("buildmaster", "storage"), NULL);
+
+  if(storage != NULL && !strcmp(storage, "s3")) {
+    // We want to store in AWS S3
+
+    const char *bucket = cfg_get_str(pc, CFG("s3", "bucket"), NULL);
+    const char *secret = cfg_get_str(pc, CFG("s3", "secret"), NULL);
+    const char *awsid  = cfg_get_str(pc, CFG("s3", "awsid"),  NULL);
+
+    if(bucket == NULL || secret == NULL || awsid == NULL) {
+      plog(p, "build/artifact",
+           "Build #%d: Missing s3 config for project %s",
+           jobid, project);
+      return 500;
+    }
+
+    char redir_path[128];
+    snprintf(redir_path, sizeof(redir_path), "files/%s", sha1sum);
+
+    int expire = time(NULL) + 300;
+    char sigstr[512];
+    snprintf(sigstr, sizeof(sigstr), "PUT\n\n%s\n%d\n/%s/%s",
+             contenttype ?: "", expire, bucket, redir_path);
+    uint8_t md[20];
+    char b64[100];
+
+    HMAC(EVP_sha1(), secret, strlen(secret), (void *)sigstr,
+         strlen(sigstr), md, NULL);
+    base64_encode(b64, sizeof(b64), md, sizeof(md));
+
+    char sig[128];
+    url_escape(sig, sizeof(sig), b64, URL_ESCAPE_PARAM);
+
+    char location[512];
+    snprintf(location, sizeof(location),
+             "https://%s.s3.amazonaws.com/%s?Signature=%s&Expires=%d&AWSAccessKeyId=%s",
+             bucket, redir_path, sig, expire, awsid);
+    http_redirect(hc, location, HTTP_STATUS_TEMPORARY_REDIRECT);
+
+    db_stmt_exec(s, "issssissss",
+                 jobid,
+                 type,
+                 redir_path,
+                 "s3",
+                 name,
+                 hc->hc_post_len,
+                 md5sum,
+                 sha1sum,
+                 contenttype,
+                 encoding);
+
+    plog(p, "build/artifact",
+         "Build #%d: Artifact '%s' stored at s3://%s/%s",
+         jobid, name, bucket, redir_path);
+
+    return 0;
+  }
+
+  if(flags & HTTP_ROUTE_HANDLE_100_CONTINUE)
+    return 100; // Ok to continue
+
   if(hc->hc_post_len > 16384 ||
      !strcmp(encoding ?: "", "gzip") ||
      !mystrbegins(contenttype, "text/plain")) {
 
-    char path[PATH_MAX];
-
     const char *basepath = cfg_get_str(pc, CFG("artifactPath"), NULL);
     if(basepath == NULL) {
       plog(p, "build/artifact",
-            "Build #%d: Missing artifactPath for project %s",
-            jobid, project);
+           "Build #%d: Missing artifactPath for project %s",
+           jobid, project);
       return 500;
     }
+
+    char path[PATH_MAX];
+
     makedirs(basepath);
     snprintf(path, sizeof(path), "%s/%d", basepath, jobid);
     mkdir(path, 0770);
@@ -781,12 +844,9 @@ delete_artifact(const char *name, const char *storage, const char *payload,
     return 0;
   } else if(!strcmp(storage, "s3")) {
 
-
-
     const char *bucket = cfg_get_str(pc, CFG("s3", "bucket"), NULL);
     const char *secret = cfg_get_str(pc, CFG("s3", "secret"), NULL);
     const char *awsid  = cfg_get_str(pc, CFG("s3", "awsid"),  NULL);
-
 
     if(bucket == NULL || secret == NULL || awsid == NULL) {
       snprintf(errbuf, errlen,
@@ -955,7 +1015,8 @@ buildmaster_init(void)
   pthread_t tid;
   pthread_create(&tid, NULL, buildmaster_periodic, NULL);
   http_path_add("/buildmaster/getjob",   NULL, http_getjob);
-  http_path_add("/buildmaster/artifact", NULL, http_artifact);
+  http_route_add("/buildmaster/artifact$", http_artifact,
+                 HTTP_ROUTE_HANDLE_100_CONTINUE);
   http_path_add("/buildmaster/report",   NULL, http_report);
   http_path_add("/buildmaster/hello",    NULL, http_hello);
 }
