@@ -422,7 +422,12 @@ http_artifact(http_connection_t *hc, int argc, char **argv, int flags)
      type == NULL ||
      name == NULL ||
      md5sum == NULL ||
-     sha1sum == NULL)
+     sha1sum == NULL  ||
+     *sha1sum == 0 ||
+     *md5sum == 0 ||
+     *name == 0 ||
+     *type == 0 ||
+     hc->hc_post_len == 0)
     return 400;
 
   int jobid = atoi(jobidstr);

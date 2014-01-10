@@ -43,7 +43,7 @@ s3_makeauth(const char *bucket, const char *awsid, const char *secret,
 
   if(contenttype) {
     char ctbuf[256];
-    snprintf(ctbuf, sizeof(ctbuf), "Content-Type %s", contenttype);
+    snprintf(ctbuf, sizeof(ctbuf), "Content-Type: %s", contenttype);
     slist = curl_slist_append(slist, ctbuf);
   }
 

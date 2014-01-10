@@ -22,11 +22,12 @@
 #include "releasemaker.h"
 #include "git.h"
 #include "sql_statements.h"
-
+#include "s3.h"
 
 typedef struct releasemaker {
   project_t *p;
 
+  cfg_t *pc;
   cfg_t *rt_cfg;
   cfg_t *tracks_cfg;
   cfg_t *targets_cfg;
@@ -34,9 +35,66 @@ typedef struct releasemaker {
 
   struct build_queue builds;
   struct target_queue targets;
-  
-  
+
 } releasemaker_t;
+
+
+
+/**
+ * Write a manifest file
+ */
+static int
+write_manifest(releasemaker_t *rm, htsmsg_t *m, const char *name)
+{
+  int err;
+  const char *manifestdir = cfg_get_str(rm->rt_cfg, CFG("manifestDir"), NULL);
+  project_t *p = rm->p;
+  char path[PATH_MAX];
+  if(manifestdir == NULL) {
+    plog(p, "release/info/all", "No manifestDir configured");
+    return EINVAL;
+  }
+
+  char *json = htsmsg_json_serialize_to_str(m, 1);
+
+  if(!strncmp(manifestdir, "s3://", strlen("s3://"))) {
+    manifestdir += strlen("s3://");
+
+    const char *bucket = cfg_get_str(rm->pc, CFG("s3", "bucket"), NULL);
+    const char *secret = cfg_get_str(rm->pc, CFG("s3", "secret"), NULL);
+    const char *awsid  = cfg_get_str(rm->pc, CFG("s3", "awsid"),  NULL);
+
+    if(bucket == NULL || secret == NULL || awsid == NULL) {
+      free(json);
+      return EINVAL;
+    }
+
+    snprintf(path, sizeof(path), "%s/%s", manifestdir, name);
+
+    char errbuf[512];
+
+    int r = aws_s3_put_file(bucket, awsid, secret, path,
+                            errbuf, sizeof(errbuf), json, strlen(json),
+                            "application/json");
+    free(json);
+    if(r) {
+      plog(p, "storage/s3", "Unable to upload %s -- %s", path, errbuf);
+      return EIO;
+    }
+    return 0;
+
+  } else {
+    makedirs(manifestdir);
+    snprintf(path, sizeof(path), "%s/%s", manifestdir, name);
+
+    err = writefile(path, json, strlen(json));
+  }
+
+  free(json);
+  return err;
+}
+
+
 
 
 /**
@@ -135,6 +193,8 @@ releasemaker_init(releasemaker_t *rm, project_t *p, cfg_t *pc)
   TAILQ_INIT(&rm->targets);
 
   rm->p = p;
+
+  rm->pc = pc;
 
   rm->rt_cfg = cfg_get_map(pc, "releaseTracks");
   if(rm->rt_cfg == NULL) {
@@ -385,7 +445,6 @@ releasemaker_list_builds(releasemaker_t *rm)
 static void
 generate_update_tracks(releasemaker_t *rm)
 {
-  char path[PATH_MAX];
   build_t *b;
   artifact_t *a;
   target_t *t;
@@ -394,19 +453,16 @@ generate_update_tracks(releasemaker_t *rm)
 
   cfg_root(root);
 
-  const char *baseurl = cfg_get_str(root, CFG("artifactPrefix"), NULL);
+  const char *baseurl;
+  baseurl = cfg_get_str(rm->rt_cfg, CFG("artifactPrefix"), NULL);
+
   if(baseurl == NULL) {
-    plog(p, "release/info/all", "No artifactPrefix configured");
-    return;
+    baseurl = cfg_get_str(root, CFG("artifactPrefix"), NULL);
+    if(baseurl == NULL) {
+      plog(p, "release/info/all", "No artifactPrefix configured");
+      return;
+    }
   }
-
-  const char *outpath = cfg_get_str(rm->rt_cfg, CFG("manifestDir"), NULL);
-  if(outpath == NULL) {
-    plog(p, "release/info/all", "No manifestDir configured");
-    return;
-  }
-
-  makedirs(outpath);
 
   htsmsg_t *outtracks = htsmsg_create_list();
 
@@ -546,19 +602,18 @@ generate_update_tracks(releasemaker_t *rm)
         git_changlog_free(&cq);
       }
 
-      char *json = htsmsg_json_serialize_to_str(out_single, 1);
+      char mname[128];
+      snprintf(mname, sizeof(mname), "%s-%s.json", trackid, b->b_target);
+
+      int err = write_manifest(rm, out_single, mname);
       htsmsg_destroy(out_single);
 
-      snprintf(path, sizeof(path), "%s/%s-%s.json",
-               outpath, trackid, b->b_target);
-
-      int err = writefile(path, json, strlen(json));
       if(err == WRITEFILE_NO_CHANGE) {
 
       } else if(err) {
         plog(p, logctx,
              "Unable to write releasetrack file %s -- %s",
-             path, strerror(err));
+             mname, strerror(err));
       } else {
         snprintf(logctx, sizeof(logctx), "release/publish/%s",
                  b->b_target);
@@ -566,7 +621,7 @@ generate_update_tracks(releasemaker_t *rm)
              COLOR_GREEN "New %s release '%s' available for %s",
              tracktitle, b->b_version, b->b_target);
       }
-      free(json);
+
 
       // Only add to all.json if the target had any artifacts at all
 
@@ -592,22 +647,17 @@ generate_update_tracks(releasemaker_t *rm)
     }
   }
 
-  char *json = htsmsg_json_serialize_to_str(outtracks, 1);
+  int err = write_manifest(rm, outtracks, "all.json");
+  htsmsg_destroy(outtracks);
 
-  snprintf(path, sizeof(path), "%s/all.json", outpath);
-
-  int err = writefile(path, json, strlen(json));
   if(err == WRITEFILE_NO_CHANGE) {
 
   } else if(err) {
     plog(p, "release/info/all",
-         "Unable to write updatemanifest file %s -- %s",
-         path, strerror(err));
+         "Unable to write updatemanifest file -- %s", strerror(err));
   } else {
     plog(p, "release/info/all", "New release manifest generated");
   }
-  free(json);
-  htsmsg_destroy(outtracks);
 }
 
 
