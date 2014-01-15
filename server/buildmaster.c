@@ -17,6 +17,7 @@
 #include "libsvc/db.h"
 #include "libsvc/cmd.h"
 #include "libsvc/talloc.h"
+#include "libsvc/htsmsg_json.h"
 
 #include "buildmaster.h"
 #include "git.h"
@@ -287,10 +288,10 @@ http_getjob(http_connection_t *hc, const char *remain, void *opaque)
 {
   cfg_root(root);
 
-  const char *agent, *secret;
+  const char *agent, *secret, *accepthdr;
   agent  = http_arg_get(&hc->hc_req_args, "agent")  ?: hc->hc_username;
   secret = http_arg_get(&hc->hc_req_args, "secret") ?: hc->hc_password;
-
+  accepthdr = http_arg_get(&hc->hc_args, "accept") ?: "";
   char *targetsarg = http_arg_get(&hc->hc_req_args, "targets");
   if(agent == NULL || secret == NULL || targetsarg == NULL)
     return 400;
@@ -312,6 +313,7 @@ http_getjob(http_connection_t *hc, const char *remain, void *opaque)
     return 403;
   }
 
+  const char *content_type;
   char *targets[64];
   int numtargets = str_tokenize(targetsarg, targets, 64, ',');
   int fails = 0;
@@ -338,8 +340,18 @@ http_getjob(http_connection_t *hc, const char *remain, void *opaque)
         continue;
       }
     none:
-      htsbuf_qprintf(&hc->hc_reply, "type=none\n");
-      http_output_content(hc, "text/plain; charset=utf-8");
+      if(!strcmp(accepthdr, "application/json")) {
+        content_type = "application/json";
+
+        htsmsg_t *out = htsmsg_create_map();
+        htsmsg_add_str(out, "type", "none");
+        htsmsg_json_serialize(out, &hc->hc_reply, 1);
+
+      } else {
+        content_type = "text/plain; charset=utf-8";
+        htsbuf_qprintf(&hc->hc_reply, "type=none\n");
+      }
+      http_output_content(hc, content_type);
       return 0;
 
     case DOOZER_ERROR_NO_DATA:
@@ -365,26 +377,44 @@ http_getjob(http_connection_t *hc, const char *remain, void *opaque)
         return 503;
       }
 
-      htsbuf_qprintf(&hc->hc_reply,
-                     "type=build\n"
-                     "id=%d\n"
-                     "revision=%s\n"
-                     "target=%s\n"
-                     "jobsecret=%s\n"
-                     "project=%s\n"
-                     "repo=%s\n"
-                     "postfix=%s\n"
-                     "no_output=%d\n",
-                     bj.id,
-                     bj.revision,
-                     bj.target,
-                     bj.jobsecret,
-                     bj.project,
-                     upstream,
-                     bj.version,
-                     bj.no_output);
 
-      if(http_output_content(hc, "text/plain; charset=utf-8")) {
+      if(!strcmp(accepthdr, "application/json")) {
+
+        htsmsg_t *out = htsmsg_create_map();
+        htsmsg_add_str(out, "type", "build");
+        htsmsg_add_u32(out, "id", bj.id);
+        htsmsg_add_str(out, "revision", bj.revision);
+        htsmsg_add_str(out, "target", bj.target);
+        htsmsg_add_str(out, "jobsecret", bj.jobsecret);
+        htsmsg_add_str(out, "project", bj.project);
+        htsmsg_add_str(out, "repo", upstream);
+        htsmsg_add_str(out, "version", bj.version);
+        htsmsg_add_u32(out, "no_output", bj.no_output);
+        htsmsg_json_serialize(out, &hc->hc_reply, 1);
+        content_type = "application/json";
+      } else {
+        content_type = "text/plain; charset=utf-8";
+        htsbuf_qprintf(&hc->hc_reply,
+                       "type=build\n"
+                       "id=%d\n"
+                       "revision=%s\n"
+                       "target=%s\n"
+                       "jobsecret=%s\n"
+                       "project=%s\n"
+                       "repo=%s\n"
+                       "postfix=%s\n"
+                       "no_output=%d\n",
+                       bj.id,
+                       bj.revision,
+                       bj.target,
+                       bj.jobsecret,
+                       bj.project,
+                       upstream,
+                       bj.version,
+                       bj.no_output);
+      }
+
+      if(http_output_content(hc, content_type)) {
         plog(p, "build/queue", "Build #%d: Transaction aborted, "
               "HTTP write failed to agent %s",
               bj.id, agent);
