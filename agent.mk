@@ -16,16 +16,17 @@
 #
 
 
+WITH_LIBGIT2 := yes
+WITH_CURL    := yes
+
+
 BUILDDIR = ${CURDIR}/build
 
 PROG=${BUILDDIR}/doozeragent
 
-LDFLAGS += -L${BUILDDIR}/libgit2/lib -lgit2 -lm
-
 SRCS =  agent/main.c \
 	agent/agent.c \
 
-CFLAGS += -I${BUILDDIR}/libgit2/include/
 
 
 install: ${PROG}
@@ -35,8 +36,3 @@ uninstall:
 
 include libsvc/libsvc.mk
 -include $(DEPS)
-
-${BUILDDIR}/libgit2/include/git2.h:
-	mkdir -p ${BUILDDIR}/libgit2/build
-	cd ${BUILDDIR}/libgit2/build && cmake ${CURDIR}/libgit2 -DCMAKE_INSTALL_PREFIX=${BUILDDIR}/libgit2 -DBUILD_SHARED_LIBS=OFF -DTHREADSAFE=ON
-	cd ${BUILDDIR}/libgit2/build && cmake --build . --target install

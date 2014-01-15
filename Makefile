@@ -16,20 +16,17 @@
 #
 
 
-WITH_MYSQL := yes
+WITH_MYSQL       := yes
+WITH_HTTP_SERVER := yes
+WITH_LIBGIT2     := yes
+WITH_CTRLSOCK    := yes
+WITH_CURL        := yes
 
 BUILDDIR = ${CURDIR}/build
 
-ALLDEPS += ${BUILDDIR}/libgit2/include/git2.h
 
 PROG=${BUILDDIR}/doozerd
 
-CFLAGS  += $(shell mysql_config --cflags)
-LDFLAGS += $(shell mysql_config --libs_r)
-
-CFLAGS += -I${BUILDDIR}/libgit2/include/
-
-LDFLAGS += -L${BUILDDIR}/libgit2/lib -lgit2
 
 SRCS =  server/main.c \
 	server/artifact_serve.c \
@@ -50,12 +47,6 @@ install: ${PROG}
 uninstall:
 	rm -f "${prefix}/bin/doozerd" "${prefix}/bin/doozer"
 
-# Include dependency files if they exist.
 include libsvc/libsvc.mk
-
 -include $(DEPS)
 
-${BUILDDIR}/libgit2/include/git2.h:
-	mkdir -p ${BUILDDIR}/libgit2/build
-	cd ${BUILDDIR}/libgit2/build && cmake ${CURDIR}/libgit2 -DCMAKE_INSTALL_PREFIX=${BUILDDIR}/libgit2 -DBUILD_SHARED_LIBS=OFF -DTHREADSAFE=ON
-	cd ${BUILDDIR}/libgit2/build && cmake --build . --target install
