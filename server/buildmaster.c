@@ -170,7 +170,13 @@ add_build(project_t *p, const char *revision,
   char ver[512];
   int no_output = 0;
 
-  if(git_describe(ver, sizeof(ver), p, revision, 1))
+  project_cfg(pc, p->p_id);
+  if(pc == NULL)
+    return DOOZER_ERROR_PERMANENT;
+
+  int hash = cfg_get_int(pc, CFG("buildmaster", "hashInRevision"), 0);
+
+  if(git_describe(ver, sizeof(ver), p, revision, hash))
     return DOOZER_ERROR_PERMANENT;
 
   conn_t *c = db_get_conn();
