@@ -297,12 +297,16 @@ tag_list_callback(const char *name, git_oid *oid, void *payload)
 {
   struct tag_list_aux * aux = payload;
   git_tag *tag;
-  if(git_tag_lookup(&tag, aux->repo, oid))
-    return 0;
 
   ref_t *r = calloc(1, sizeof(ref_t));
   r->name = strdup(name + strlen("refs/tags/"));
-  git_oid_cpy(&r->oid, git_tag_target_id(tag));
+
+  if(!git_tag_lookup(&tag, aux->repo, oid)) {
+    git_oid_cpy(&r->oid, git_tag_target_id(tag));
+  } else {
+    git_oid_cpy(&r->oid, oid);
+  }
+
   git_oid_fmt(r->oidtxt, &r->oid);
   LIST_INSERT_HEAD(aux->rl, r, link);
   git_tag_free(tag);
