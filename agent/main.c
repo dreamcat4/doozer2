@@ -20,6 +20,7 @@
 #include "libsvc/cmd.h"
 
 #include "agent.h"
+#include "artifact.h"
 
 #include <sys/types.h>
 #include <regex.h>
@@ -95,6 +96,8 @@ main(int argc, char **argv)
   }
 
   git_threads_init();
+
+  artifact_init();
 
   agent_init();
 

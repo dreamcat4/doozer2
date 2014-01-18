@@ -1,5 +1,6 @@
 #include "agent.h"
 
+#include <sys/stat.h>
 #include <sys/param.h>
 #include <pthread.h>
 #include <stdlib.h>
@@ -7,31 +8,19 @@
 #include <curl/curl.h>
 #include <stdio.h>
 #include <stdarg.h>
+#include <errno.h>
+#include <string.h>
 
 #include "libsvc/cfg.h"
 #include "libsvc/trace.h"
 #include "libsvc/htsmsg_json.h"
 #include "libsvc/misc.h"
+#include "libsvc/memstream.h"
+#include "libsvc/talloc.h"
+#include "libsvc/curlhelpers.h"
 
-/**
- *
- */
-typedef struct buildmaster {
-  const char *url;
-  const char *agentid;
-  const char *secret;
-  const char *last_rpc_error;
-
-  char rpc_errbuf[128];
-} buildmaster_t;
-
-typedef struct job {
-  buildmaster_t *bm;
-  int jobid;
-  const char *jobsecret;
-} job_t;
-
-
+#include "agent.h"
+#include "job.h"
 
 
 /**
@@ -50,13 +39,17 @@ call_buildmaster0(buildmaster_t *bm, const char *accepthdr,
 
   CURL *curl = curl_easy_init();
 
-  FILE *f = open_memstream(&out, &outlen);
+  FILE *f = open_buffer(&out, &outlen);
   curl_easy_setopt(curl, CURLOPT_URL, url);
   curl_easy_setopt(curl, CURLOPT_USERNAME, bm->agentid);
   curl_easy_setopt(curl, CURLOPT_PASSWORD, bm->secret);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, f);
   curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
+
+  curl_easy_setopt(curl, CURLOPT_OPENSOCKETFUNCTION, &libsvc_curl_sock_fn);
+  curl_easy_setopt(curl, CURLOPT_OPENSOCKETDATA, NULL);
+
   struct curl_slist *slist = NULL;
   if(accepthdr) {
     char b[128];
@@ -91,7 +84,7 @@ call_buildmaster0(buildmaster_t *bm, const char *accepthdr,
 /**
  *
  */
-static char *
+char *
 call_buildmaster(buildmaster_t *bm, const char *path, ...)
 {
   va_list ap;
@@ -122,33 +115,8 @@ call_buildmaster_json(buildmaster_t *bm, const char *path, ...)
   return m;
 }
 
-/**
- *
- */
-static int
-job_report_status(job_t *j, const char *status0, const char *msg0)
-{
-  char status[64];
-  char msg[512];
 
-  url_escape(status, sizeof(status), status0, URL_ESCAPE_PARAM);
-  url_escape(msg,    sizeof(msg),    msg0,    URL_ESCAPE_PARAM);
 
-  while(1) {
-
-    char *r = call_buildmaster(j->bm, "report?jobid=%d&jobsecret=%s&status=%s&msg=%s",
-                                 j->jobid, j->jobsecret, status, msg);
-    if(r == NULL) {
-      trace(LOG_WARNING, "Unable to report status '%s' -- %s. Retrying", status,
-            j->bm->last_rpc_error);
-      sleep(3);
-      continue;
-    }
-
-    free(r);
-    return 0;
-  }
-}
 
 /**
  *
@@ -158,6 +126,7 @@ getjob(buildmaster_t *bm)
 {
   char buf[4096];
   int off = 0;
+  htsmsg_t *msg = NULL;
   cfg_root(root);
 
   cfg_t *targets_msg = cfg_get_list(root, "targets");
@@ -183,39 +152,15 @@ getjob(buildmaster_t *bm)
     return -1;
   }
 
-  htsmsg_t *msg = call_buildmaster_json(bm, "getjob?targets=%s", buf);
+  msg = call_buildmaster_json(bm, "getjob?targets=%s", buf);
   if(msg == NULL) {
     trace(LOG_ERR, "Unable to getjob -- %s", bm->last_rpc_error);
     return -1;
   }
   htsmsg_print(msg);
-  job_t j;
-
-  j.jobid = htsmsg_get_u32_or_default(msg, "id", 0);
-  if(j.jobid == 0) {
-    trace(LOG_ERR, "Job has no jobid");
-    goto bad;
-  }
-
-  j.jobsecret = htsmsg_get_str(msg, "jobsecret");
-  if(j.jobsecret == NULL) {
-    trace(LOG_ERR, "Job has no jobsecret");
-    goto bad;
-  }
-
-  j.bm = bm;
-  job_report_status(&j, "building", "GIT checkout");
-
-  job_report_status(&j, "building", "GIT checkout3");
-  sleep(10);
-
-
+  job_process(bm, msg);
   htsmsg_destroy(msg);
   return 0;
-
- bad:
-  htsmsg_destroy(msg);
-  return 1;
 }
 
 
@@ -232,6 +177,7 @@ agent_run(void)
   bm.url     = cfg_get_str(root, CFG("buildmaster", "url"), NULL);
   bm.agentid = cfg_get_str(root, CFG("buildmaster", "agentid"), NULL);
   bm.secret  = cfg_get_str(root, CFG("buildmaster", "secret"), NULL);
+  bm.workdir = cfg_get_str(root, CFG("workdir"), NULL);
 
   if(bm.url == NULL) {
     trace(LOG_ERR, "Missing configuration buildmaster.url");
@@ -248,6 +194,23 @@ agent_run(void)
     return -1;
   }
 
+  if(bm.workdir == NULL) {
+    trace(LOG_ERR, "Missing configuration workdir");
+    return -1;
+  }
+
+  if(mkdir(bm.workdir, 0777) && errno != EEXIST) {
+    trace(LOG_ERR, "Unable to create %s -- %s", bm.workdir, strerror(errno));
+    return -1;
+  }
+
+  char repos[PATH_MAX];
+  snprintf(repos, sizeof(repos), "%s/repos", bm.workdir);
+  if(mkdir(repos, 0777) && errno != EEXIST) {
+    trace(LOG_ERR, "Unable to create %s -- %s", repos, strerror(errno));
+    return -1;
+  }
+
   char *msg = call_buildmaster(&bm, "hello");
   if(msg == NULL) {
     trace(LOG_ERR, "Not welcomed by buildmaster -- %s", bm.last_rpc_error);
@@ -256,7 +219,9 @@ agent_run(void)
   free(msg);
   trace(LOG_DEBUG, "Welcomed by buildmaster");
 
-  while(!getjob(&bm)) {}
+  while(!getjob(&bm)) {
+    talloc_cleanup();
+  }
 
   return 0;
 }
@@ -270,6 +235,8 @@ agent_main(void *aux)
 {
   int sleeper = 1;
   while(1) {
+
+    talloc_cleanup();
 
     if(agent_run()) {
       sleeper = MIN(120, sleeper * 2);

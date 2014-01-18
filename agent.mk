@@ -26,7 +26,12 @@ PROG=${BUILDDIR}/doozeragent
 
 SRCS =  agent/main.c \
 	agent/agent.c \
-
+	agent/job.c \
+	agent/git.c \
+	agent/doozerctrl.c \
+	agent/autobuild.c \
+	agent/makefile.c \
+	agent/artifact.c \
 
 
 install: ${PROG}
