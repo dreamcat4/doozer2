@@ -30,9 +30,9 @@ makefile_process(job_t *j)
   htsbuf_queue_t output;
   htsbuf_queue_init2(&output, 100000);
 
-  int r = job_run_command(j, "/usr/bin/env",
+  int r = job_run_command(j,
                           (const char *[]){"/usr/bin/env", "make", NULL},
-                          &output, "make", errbuf, sizeof(errbuf));
+                          &output, 0, errbuf, sizeof(errbuf));
 
 
   if(output.hq_size) {

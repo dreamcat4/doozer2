@@ -3,10 +3,9 @@
 #include <pthread.h>
 #include <sys/queue.h>
 #include "agent.h"
-
+#include "spawn.h"
 
 struct htsmsg;
-struct htsbuf_queue;
 
 LIST_HEAD(artifact_list, artifact);
 
@@ -65,9 +64,6 @@ void job_report_temp_fail(job_t *j, const char *fmt, ...)
 
 void job_process(buildmaster_t *bm, struct htsmsg *msg);
 
-#define JOB_RUN_COMMAND_PERMANENT_FAIL -1
-#define JOB_RUN_COMMAND_TEMPORARY_FAIL -2
-
-int job_run_command(job_t *j, const char *path, const char *argv[],
-                    struct htsbuf_queue *output, const char *cmd,
-                    char *errbuf, size_t errlen);
+int job_run_command(job_t *j, const char *argv[],
+                    struct htsbuf_queue *output,
+                    int flags, char *errbuf, size_t errlen);

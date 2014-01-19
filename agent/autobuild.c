@@ -71,15 +71,13 @@ autobuild_process(job_t *j)
 
   char errbuf[1024];
 
-  job_run_command(j, j->autobuild,
+  job_run_command(j,
                   (const char *[]){j->autobuild,
                       "-t", j->target, "-o", "deps", NULL},
-                  &output, j->autobuild,
-                  errbuf, sizeof(errbuf));
+                  &output, 0, errbuf, sizeof(errbuf));
 
-  job_run_command(j, j->autobuild,
+  job_run_command(j,
                   (const char *[]){j->autobuild,
                       "-t", j->target, "-o", "build", NULL},
-                  &output, j->autobuild,
-                  errbuf, sizeof(errbuf));
+                  &output, 0, errbuf, sizeof(errbuf));
 }

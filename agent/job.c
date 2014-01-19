@@ -97,6 +97,29 @@ job_report_fail(job_t *j, const char *fmt, ...)
 /**
  *
  */
+void
+job_report_temp_fail(job_t *j, const char *fmt, ...)
+{
+  va_list ap;
+  va_start(ap, fmt);
+  job_report_status_va(j, j->can_temp_fail ? "tempfailed" : "failed", fmt, ap);
+  va_end(ap);
+}
+
+
+
+/**
+ *
+ */
+typedef struct job_run_command_aux {
+  job_t *job;
+  const char **argv;
+} job_run_command_aux_t;
+
+
+/**
+ *
+ */
 static int
 intercept_doozer_artifact(job_t *j, const char *a, int gzipped,
                           char *errbuf, size_t errlen)
@@ -105,7 +128,7 @@ intercept_doozer_artifact(job_t *j, const char *a, int gzipped,
   char *argv[4];
   if(str_tokenize(line, argv, 4, ':') != 4) {
     snprintf(errbuf, errlen, "Invalid doozer-artifact line");
-    return JOB_RUN_COMMAND_PERMANENT_FAIL;
+    return SPAWN_PERMANENT_FAIL;
   }
 
   const char *localpath   = argv[0];
@@ -136,7 +159,7 @@ intercept_doozer_artifact(job_t *j, const char *a, int gzipped,
 
   if(artifact_add_file(j, filetype, newfilename, contenttype,
                        localpath, gzipped, errbuf, errlen))
-    return JOB_RUN_COMMAND_PERMANENT_FAIL;
+    return SPAWN_PERMANENT_FAIL;
   return 0;
 }
 
@@ -144,223 +167,79 @@ intercept_doozer_artifact(job_t *j, const char *a, int gzipped,
 /**
  *
  */
-int
-job_run_command(job_t *j,
-                const char *path,
-                const char *argv[],
-                htsbuf_queue_t *output,
-                const char *cmd,
-                char *errbuf, size_t errlen)
+static int
+job_run_command_line_intercept(void *opaque,
+                               const char *line,
+                               char *errbuf,
+                               size_t errlen)
 {
-  int pipe_stdout[2];
-  int pipe_stderr[2];
-  const int timeout = 600;
-  const int print_to_stdout = isatty(1);
-
-  if(pipe(pipe_stdout) || pipe(pipe_stderr)) {
-    snprintf(errbuf, errlen, "Unable to create pipe -- %s",
-             strerror(errno));
-    return JOB_RUN_COMMAND_TEMPORARY_FAIL;
-  }
-
-  pid_t pid = fork();
-
-  if(pid == -1) {
-    close(pipe_stdout[0]);
-    close(pipe_stdout[1]);
-    close(pipe_stderr[0]);
-    close(pipe_stderr[1]);
-    snprintf(errbuf, errlen, "Unable to fork -- %s",
-             strerror(errno));
-    return JOB_RUN_COMMAND_TEMPORARY_FAIL;
-  }
-
-  if(pid == 0) {
-    // Close read ends of pipe
-    close(pipe_stdout[0]);
-    close(pipe_stderr[0]);
-
-    dup2(pipe_stdout[1], 1);
-    dup2(pipe_stderr[1], 2);
-
-    close(pipe_stdout[1]);
-    close(pipe_stderr[1]);
-
-    if(chdir(j->repodir)) {
-      fprintf(stderr, "Unable to chdir to %s -- %s\n",
-              j->repodir, strerror(errno));
-      exit(1);
-    }
-
-    // First, go back to root
-
-    if(setuid(0)) {
-      fprintf(stderr, "Unable to setuid(0) -- %s\n",
-              strerror(errno));
-      exit(1);
-    }
-
-    if(setuid(build_uid)) {
-      fprintf(stderr, "Unable to setuid(%d) -- %s\n",
-              build_uid, strerror(errno));
-      exit(1);
-    }
-
-    execv(path, (void *)argv);
-    fprintf(stderr, "Unable to execute %s -- %s\n",
-            path, strerror(errno));
-    exit(127);
-  }
-
-  // Close write ends of pipe
-  close(pipe_stdout[1]);
-  close(pipe_stderr[1]);
-
-  struct pollfd fds[2] = {
-    {
-      .fd = pipe_stdout[0],
-      .events = POLLIN | POLLHUP | POLLERR,
-    }, {
-
-      .fd = pipe_stderr[0],
-      .events = POLLIN | POLLHUP | POLLERR,
-    }
-  };
-
-  int got_timeout = 0;
-
-  char buf[10000];
-
-  htsbuf_queue_t stdout_q, stderr_q, *q;
-
-  htsbuf_queue_init(&stdout_q, 0);
-  htsbuf_queue_init(&stderr_q, 0);
-
+  job_run_command_aux_t *aux = opaque;
+  job_t *j = aux->job;
+  const char *a;
   int err = 0;
 
-  while(!err) {
+  if((a = mystrbegins(line, "doozer-artifact:")) != NULL)
+    err = intercept_doozer_artifact(j, a, 0, errbuf, errlen);
+  else if((a = mystrbegins(line, "doozer-artifact-gzip:")) != NULL)
+    err = intercept_doozer_artifact(j, a, 1, errbuf, errlen);
+  return err;
+}
 
-    int r = poll(fds, 2, timeout * 1000);
-    if(r == 0) {
-      got_timeout = 1;
-      break;
-    }
+/**
+ *
+ */
+static int
+job_run_command_spawn(void *opaque)
+{
+  job_run_command_aux_t *aux = opaque;
+  job_t *j = aux->job;
 
-    if(fds[0].revents & (POLLHUP | POLLERR))
-      break;
-    if(fds[1].revents & (POLLHUP | POLLERR))
-      break;
-
-    if(fds[0].revents & POLLIN) {
-      r = read(fds[0].fd, buf, sizeof(buf));
-      q = &stdout_q;
-    } else if(fds[1].revents & POLLIN) {
-      r = read(fds[1].fd, buf, sizeof(buf));
-      q = &stderr_q;
-    } else {
-      printf("POLL WAT\n");
-      sleep(1);
-      continue;
-    }
-
-    if(r == 0 || r == -1)
-      break;
-
-    htsbuf_append(q, buf, r);
-
-    while(!err) {
-      int len = htsbuf_find(q, 0xa);
-      if(len == -1)
-        break;
-
-      if(q == &stderr_q)
-        htsbuf_append(output, (const uint8_t []){0xef,0xbf,0xb9}, 3);
-
-      char *line;
-      if(len < sizeof(buf) - 1) {
-        line = buf;
-      } else {
-        line = malloc(len + 1);
-      }
-
-      htsbuf_read(q, line, len);
-      htsbuf_drop(q, 1); // Drop \n
-      line[len] = 0;
-
-      htsbuf_append(output, line, len);
-      htsbuf_append(output, "\n", 1);
-
-      if(print_to_stdout) {
-        printf("%s: %s\033[0m\n",
-               q == &stderr_q ? "\033[31mstderr" : "\033[33mstdout",
-               line);
-      }
-
-      const char *a;
-      if((a = mystrbegins(line, "doozer-artifact:")) != NULL)
-        err = intercept_doozer_artifact(j, a, 0, errbuf, errlen);
-      else if((a = mystrbegins(line, "doozer-artifact-gzip:")) != NULL)
-        err = intercept_doozer_artifact(j, a, 1, errbuf, errlen);
-
-      if(line != buf)
-        free(line);
-    }
+  if(chdir(j->repodir)) {
+    fprintf(stderr, "Unable to chdir to %s -- %s\n",
+            j->repodir, strerror(errno));
+    return 1;
   }
 
-  if(got_timeout || err)
-    kill(pid, SIGKILL);
+  // First, go back to root
 
-  int status;
-  if(waitpid(pid, &status, 0) == -1) {
-    snprintf(errbuf, errlen, "Unable to wait for child -- %s",
-             strerror(errno));
-    return JOB_RUN_COMMAND_TEMPORARY_FAIL;
+  if(setuid(0)) {
+    fprintf(stderr, "Unable to setuid(0) -- %s\n",
+            strerror(errno));
+    return 1;
   }
 
-  if(got_timeout) {
-    snprintf(errbuf, errlen, "No output detected for %d seconds",
-             timeout);
-    return JOB_RUN_COMMAND_TEMPORARY_FAIL;
+  // Then setuid to build_uid
+
+  if(setuid(build_uid)) {
+    fprintf(stderr, "Unable to setuid(%d) -- %s\n",
+            build_uid, strerror(errno));
+    return 1;
   }
 
-  if(err)
-    return err;
-
-  if(WIFEXITED(status)) {
-    const int exit_status = WEXITSTATUS(status);
-    if(exit_status == 127) {
-      snprintf(errbuf, errlen, "Unable to execute command: %s", cmd);
-      return JOB_RUN_COMMAND_PERMANENT_FAIL;
-    }
-    return exit_status;
-  } else if (WIFSIGNALED(status)) {
-#ifdef WCOREDUMP
-    if(WCOREDUMP(status)) {
-      snprintf(errbuf, errlen, "Unable to execute command: %s", cmd);
-      return JOB_RUN_COMMAND_TEMPORARY_FAIL;
-    }
-#endif
-    snprintf(errbuf, errlen,
-             "Terminated by signal %d", WTERMSIG(status));
-    return JOB_RUN_COMMAND_TEMPORARY_FAIL;
-  }
-  snprintf(errbuf, errlen,
-           "Exited with status code %d", status);
-  return JOB_RUN_COMMAND_TEMPORARY_FAIL;
+  execv(aux->argv[0], (void *)aux->argv);
+  fprintf(stderr, "Unable to execute %s -- %s\n",
+          aux->argv[0], strerror(errno));
+  return 127;
 }
 
 
 /**
  *
  */
-void
-job_report_temp_fail(job_t *j, const char *fmt, ...)
+int
+job_run_command(job_t *j, const char **argv,
+                struct htsbuf_queue *output,
+                int flags, char *errbuf, size_t errlen)
 {
-  va_list ap;
-  va_start(ap, fmt);
-  job_report_status_va(j, j->can_temp_fail ? "tempfailed" : "failed", fmt, ap);
-  va_end(ap);
+  job_run_command_aux_t aux;
+  aux.job = j;
+  aux.argv = argv;
+  return spawn(job_run_command_spawn,
+               job_run_command_line_intercept,
+               &aux, output, 600, flags,
+               errbuf, errlen);
 }
+
 
 /**
  *
@@ -381,6 +260,8 @@ job_mkdir(job_t *j, char path[PATH_MAX], const char *fmt, ...)
   }
   return 0;
 }
+
+
 
 
 
