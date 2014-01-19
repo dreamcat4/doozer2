@@ -304,7 +304,6 @@ artifact_send(artifact_t *a)
   curl_easy_setopt(curl, CURLOPT_PASSWORD, bm->secret);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
   curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
-  curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, &libsvc_curl_waste_output);
 
   curl_easy_setopt(curl, CURLOPT_READDATA, (void *)a);

@@ -157,7 +157,6 @@ getjob(buildmaster_t *bm)
     trace(LOG_ERR, "Unable to getjob -- %s", bm->last_rpc_error);
     return -1;
   }
-  htsmsg_print(msg);
   job_process(bm, msg);
   htsmsg_destroy(msg);
   return 0;
