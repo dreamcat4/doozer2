@@ -32,6 +32,7 @@ SRCS =  agent/main.c \
 	agent/autobuild.c \
 	agent/makefile.c \
 	agent/artifact.c \
+	agent/heap_btrfs.c \
 
 
 install: ${PROG}

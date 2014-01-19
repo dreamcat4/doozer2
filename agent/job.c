@@ -19,9 +19,12 @@
 #include "libsvc/misc.h"
 #include "libsvc/trace.h"
 #include "libsvc/htsbuf.h"
+#include "libsvc/misc.h"
 
 #include "job.h"
+#include "heap.h"
 #include "git.h"
+#include "artifact.h"
 #include "autobuild.h"
 #include "doozerctrl.h"
 #include "makefile.h"
@@ -94,12 +97,60 @@ job_report_fail(job_t *j, const char *fmt, ...)
 /**
  *
  */
+static int
+intercept_doozer_artifact(job_t *j, const char *a, int gzipped,
+                          char *errbuf, size_t errlen)
+{
+  char *line = mystrdupa(a);
+  char *argv[4];
+  if(str_tokenize(line, argv, 4, ':') != 4) {
+    snprintf(errbuf, errlen, "Invalid doozer-artifact line");
+    return JOB_RUN_COMMAND_PERMANENT_FAIL;
+  }
+
+  const char *localpath   = argv[0];
+  const char *filetype    = argv[1];
+  const char *contenttype = argv[2];
+  const char *filename    = argv[3];
+
+  if(localpath[0] == '/') {
+
+  } else {
+    char newpath[PATH_MAX];
+    snprintf(newpath, sizeof(newpath), "%s/%s",
+             j->repodir, localpath);
+    localpath = newpath;
+  }
+
+  char newfilename[PATH_MAX];
+
+  char *file_ending = strrchr(filename, '.');
+  if(file_ending != NULL)
+    *file_ending++ = 0;
+
+  snprintf(newfilename, sizeof(newfilename),
+           "%s-%s%s%s",
+           filename, j->version,
+           file_ending ? "." : "",
+           file_ending ?: "");
+
+  if(artifact_add_file(j, filetype, newfilename, contenttype,
+                       localpath, gzipped, errbuf, errlen))
+    return JOB_RUN_COMMAND_PERMANENT_FAIL;
+  return 0;
+}
+
+
+/**
+ *
+ */
 int
 job_run_command(job_t *j,
                 const char *path,
                 const char *argv[],
                 htsbuf_queue_t *output,
-                const char *cmd)
+                const char *cmd,
+                char *errbuf, size_t errlen)
 {
   int pipe_stdout[2];
   int pipe_stderr[2];
@@ -107,17 +158,21 @@ job_run_command(job_t *j,
   const int print_to_stdout = isatty(1);
 
   if(pipe(pipe_stdout) || pipe(pipe_stderr)) {
-    job_report_temp_fail(j, "%s: Unable to create pipe -- %s",
-                         cmd, strerror(errno));
-    return -1;
+    snprintf(errbuf, errlen, "Unable to create pipe -- %s",
+             strerror(errno));
+    return JOB_RUN_COMMAND_TEMPORARY_FAIL;
   }
 
   pid_t pid = fork();
 
   if(pid == -1) {
-    job_report_temp_fail(j, "%s: Unable to fork -- %s",
-                         cmd, strerror(errno));
-    return -1;
+    close(pipe_stdout[0]);
+    close(pipe_stdout[1]);
+    close(pipe_stderr[0]);
+    close(pipe_stderr[1]);
+    snprintf(errbuf, errlen, "Unable to fork -- %s",
+             strerror(errno));
+    return JOB_RUN_COMMAND_TEMPORARY_FAIL;
   }
 
   if(pid == 0) {
@@ -134,6 +189,20 @@ job_run_command(job_t *j,
     if(chdir(j->repodir)) {
       fprintf(stderr, "Unable to chdir to %s -- %s\n",
               j->repodir, strerror(errno));
+      exit(1);
+    }
+
+    // First, go back to root
+
+    if(setuid(0)) {
+      fprintf(stderr, "Unable to setuid(0) -- %s\n",
+              strerror(errno));
+      exit(1);
+    }
+
+    if(setuid(build_uid)) {
+      fprintf(stderr, "Unable to setuid(%d) -- %s\n",
+              build_uid, strerror(errno));
       exit(1);
     }
 
@@ -167,7 +236,9 @@ job_run_command(job_t *j,
   htsbuf_queue_init(&stdout_q, 0);
   htsbuf_queue_init(&stderr_q, 0);
 
-  while(1) {
+  int err = 0;
+
+  while(!err) {
 
     int r = poll(fds, 2, timeout * 1000);
     if(r == 0) {
@@ -197,72 +268,85 @@ job_run_command(job_t *j,
 
     htsbuf_append(q, buf, r);
 
-    while(1) {
+    while(!err) {
       int len = htsbuf_find(q, 0xa);
       if(len == -1)
         break;
 
       if(q == &stderr_q)
-        htsbuf_append(output, (const uint8_t []){0xff, 0xf9}, 2);
+        htsbuf_append(output, (const uint8_t []){0xef,0xbf,0xb9}, 3);
 
-      if(print_to_stdout) {
-        printf("%s: ", q == &stderr_q ? "\033[31mstderr" : "\033[33mstdout");
-        fflush(stdout);
+      char *line;
+      if(len < sizeof(buf) - 1) {
+        line = buf;
+      } else {
+        line = malloc(len + 1);
       }
 
-      while(len) {
-        int chunk = MIN(len, sizeof(buf));
-        htsbuf_read(q, buf, chunk);
+      htsbuf_read(q, line, len);
+      htsbuf_drop(q, 1); // Drop \n
+      line[len] = 0;
 
-        if(print_to_stdout) {
-          if(write(1, buf, chunk)) {}
-        }
-
-        htsbuf_append(output, buf, chunk);
-        len -= chunk;
-      }
-
-      if(print_to_stdout)
-        printf("\033[0m\n");
-
+      htsbuf_append(output, line, len);
       htsbuf_append(output, "\n", 1);
 
-      htsbuf_drop(q, 1); // Drop \n
+      if(print_to_stdout) {
+        printf("%s: %s\033[0m\n",
+               q == &stderr_q ? "\033[31mstderr" : "\033[33mstdout",
+               line);
+      }
+
+      const char *a;
+      if((a = mystrbegins(line, "doozer-artifact:")) != NULL)
+        err = intercept_doozer_artifact(j, a, 0, errbuf, errlen);
+      else if((a = mystrbegins(line, "doozer-artifact-gzip:")) != NULL)
+        err = intercept_doozer_artifact(j, a, 1, errbuf, errlen);
+
+      if(line != buf)
+        free(line);
     }
   }
 
-  if(got_timeout)
+  if(got_timeout || err)
     kill(pid, SIGKILL);
 
   int status;
   if(waitpid(pid, &status, 0) == -1) {
-    job_report_temp_fail(j, "%s: Unable to wait for child -- %s",
-                         cmd, strerror(errno));
-    return -1;
+    snprintf(errbuf, errlen, "Unable to wait for child -- %s",
+             strerror(errno));
+    return JOB_RUN_COMMAND_TEMPORARY_FAIL;
   }
 
-  if(got_timeout)
-    return -2;
+  if(got_timeout) {
+    snprintf(errbuf, errlen, "No output detected for %d seconds",
+             timeout);
+    return JOB_RUN_COMMAND_TEMPORARY_FAIL;
+  }
+
+  if(err)
+    return err;
 
   if(WIFEXITED(status)) {
     const int exit_status = WEXITSTATUS(status);
     if(exit_status == 127) {
-      job_report_fail(j, "%s: Unable to execute command", cmd);
-      return -1;
+      snprintf(errbuf, errlen, "Unable to execute command: %s", cmd);
+      return JOB_RUN_COMMAND_PERMANENT_FAIL;
     }
     return exit_status;
   } else if (WIFSIGNALED(status)) {
 #ifdef WCOREDUMP
     if(WCOREDUMP(status)) {
-      job_report_fail(j, "%s: Core dumped", cmd);
-      return -1;
+      snprintf(errbuf, errlen, "Unable to execute command: %s", cmd);
+      return JOB_RUN_COMMAND_TEMPORARY_FAIL;
     }
 #endif
-    job_report_fail(j, "%s: Terminated by signal %d", cmd, WTERMSIG(status));
-    return -1;
+    snprintf(errbuf, errlen,
+             "Terminated by signal %d", WTERMSIG(status));
+    return JOB_RUN_COMMAND_TEMPORARY_FAIL;
   }
-  job_report_fail(j, "%s: Exited with status code %d", cmd, status);
-  return -1;
+  snprintf(errbuf, errlen,
+           "Exited with status code %d", status);
+  return JOB_RUN_COMMAND_TEMPORARY_FAIL;
 }
 
 
@@ -278,6 +362,25 @@ job_report_temp_fail(job_t *j, const char *fmt, ...)
   va_end(ap);
 }
 
+/**
+ *
+ */
+static int
+job_mkdir(job_t *j, char path[PATH_MAX], const char *fmt, ...)
+{
+  va_list ap;
+  int l = snprintf(path, PATH_MAX, "%s/", j->projectdir);
+
+  va_start(ap, fmt);
+  vsnprintf(path + l, PATH_MAX - l, fmt, ap);
+  va_end(ap);
+  if(mkdir(path, 0777) && errno != EEXIST) {
+    job_report_temp_fail(j, "Unable to create dir %s -- %s",
+                         path, strerror(errno));
+    return -1;
+  }
+  return 0;
+}
 
 
 
@@ -289,12 +392,16 @@ job_process(buildmaster_t *bm, htsmsg_t *msg)
 {
   job_t j;
   j.bm = bm;
+
+
   const char *type = htsmsg_get_str(msg, "type");
   if(type == NULL)
     return;
 
   if(strcmp(type, "build"))
     return;
+
+  htsmsg_print(msg);
 
   j.jobid = htsmsg_get_u32_or_default(msg, "id", 0);
   if(j.jobid == 0) {
@@ -338,16 +445,40 @@ job_process(buildmaster_t *bm, htsmsg_t *msg)
     return;
   }
 
-  char repodir[PATH_MAX];
-  snprintf(repodir, sizeof(repodir), "%s/repos/%s", bm->workdir, j.project);
-  if(mkdir(repodir, 0777) && errno != EEXIST) {
-    trace(LOG_ERR, "Unable to create %s -- %s", repodir, strerror(errno));
-    job_report_temp_fail(&j, "Unable to create repo directory %s -- %s",
-                         repodir, strerror(errno));
+
+  // Create project heap
+
+  char errbuf[512];
+  char heapdir[PATH_MAX];
+  int r = projects_heap_mgr->open_heap(projects_heap_mgr,
+                                       j.project,
+                                       heapdir,
+                                       errbuf, sizeof(errbuf), 1);
+
+  if(r) {
+    job_report_fail(&j, "%s", errbuf);
     return;
   }
 
+  j.projectdir = heapdir;
+
+  char checkoutdir[PATH_MAX];
+  if(job_mkdir(&j, checkoutdir, "checkout"))
+    return;
+
+  char repodir[PATH_MAX];
+  if(job_mkdir(&j, repodir, "checkout/%s", j.project))
+    return;
   j.repodir = repodir;
+
+  char workdir[PATH_MAX];
+  if(job_mkdir(&j, workdir, "workdir"))
+    return;
+  j.workdir = repodir;
+
+
+  // Checkout from GIT
+
   if(git_checkout_repo(&j))
     return;
 

@@ -10,6 +10,7 @@
 #include <stdarg.h>
 #include <errno.h>
 #include <string.h>
+#include <grp.h>
 
 #include "libsvc/cfg.h"
 #include "libsvc/trace.h"
@@ -169,14 +170,16 @@ getjob(buildmaster_t *bm)
 static int
 agent_run(void)
 {
-  buildmaster_t bm;
+  buildmaster_t bm = {};
 
   cfg_root(root);
 
   bm.url     = cfg_get_str(root, CFG("buildmaster", "url"), NULL);
   bm.agentid = cfg_get_str(root, CFG("buildmaster", "agentid"), NULL);
   bm.secret  = cfg_get_str(root, CFG("buildmaster", "secret"), NULL);
-  bm.workdir = cfg_get_str(root, CFG("workdir"), NULL);
+
+  const char *projects_dir = cfg_get_str(root, CFG("projectsdir"), NULL);
+  //  const char *buildenv_dir = cfg_get_str(root, CFG("buildenvdir"), NULL);
 
   if(bm.url == NULL) {
     trace(LOG_ERR, "Missing configuration buildmaster.url");
@@ -193,26 +196,20 @@ agent_run(void)
     return -1;
   }
 
-  if(bm.workdir == NULL) {
-    trace(LOG_ERR, "Missing configuration workdir");
+  if(projects_dir == NULL) {
+    trace(LOG_ERR, "Missing configuration projectsdir");
     return -1;
   }
 
-  if(mkdir(bm.workdir, 0777) && errno != EEXIST) {
-    trace(LOG_ERR, "Unable to create %s -- %s", bm.workdir, strerror(errno));
-    return -1;
-  }
-
-  char repos[PATH_MAX];
-  snprintf(repos, sizeof(repos), "%s/repos", bm.workdir);
-  if(mkdir(repos, 0777) && errno != EEXIST) {
-    trace(LOG_ERR, "Unable to create %s -- %s", repos, strerror(errno));
+  if(mkdir(projects_dir, 0777) && errno != EEXIST) {
+    trace(LOG_ERR, "Unable to create %s -- %s", projects_dir, strerror(errno));
     return -1;
   }
 
   char *msg = call_buildmaster(&bm, "hello");
   if(msg == NULL) {
-    trace(LOG_ERR, "Not welcomed by buildmaster -- %s", bm.last_rpc_error);
+    trace(LOG_ERR, "Not welcomed by buildmaster -- %s",
+          bm.last_rpc_error);
     return -1;
   }
   free(msg);

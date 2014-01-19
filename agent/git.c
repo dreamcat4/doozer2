@@ -200,10 +200,10 @@ repo_checkout(git_repository *repo, job_t *j, const git_oid *oid)
   if(git_object_lookup(&obj, repo, oid, GIT_OBJ_COMMIT))
     return -1;
 
-  if(git_checkout_tree(repo, obj, &opts))
-    return -1;
+  int r = git_checkout_tree(repo, obj, &opts);
+  git_object_free(obj);
 
-  return 0;
+  return r ? -1 : 0;
 }
 
 
@@ -249,9 +249,11 @@ git_checkout_repo(job_t *j)
     if(repo_checkout(repo, j, &oid)) {
       job_report_temp_fail(j, "GIT: Failed to checkout %s -- %s",
                         j->revision, giterr());
+      git_repository_free(repo);
       return -1;
     }
   }
+  git_repository_free(repo);
 
   job_report_status(j, "building", "GIT: Checked out %s",
                     j->revision);

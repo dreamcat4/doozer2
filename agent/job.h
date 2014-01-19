@@ -23,13 +23,17 @@ typedef struct job {
   int jobid;
   int can_temp_fail;
   const char *jobsecret;
-  const char *repodir;
-
   const char *repourl;
   const char *project;
   const char *version;
   const char *revision;
   const char *target;
+
+  // Various filesystem paths (outside any chroot, etc)
+
+  const char *projectdir;
+  const char *repodir;
+  const char *workdir;
 
   // For autobuild mode
 
@@ -61,8 +65,9 @@ void job_report_temp_fail(job_t *j, const char *fmt, ...)
 
 void job_process(buildmaster_t *bm, struct htsmsg *msg);
 
-
-//#define RUN_COMMAND_ERROR_REPORTED -1
+#define JOB_RUN_COMMAND_PERMANENT_FAIL -1
+#define JOB_RUN_COMMAND_TEMPORARY_FAIL -2
 
 int job_run_command(job_t *j, const char *path, const char *argv[],
-                    struct htsbuf_queue *output, const char *cmd);
+                    struct htsbuf_queue *output, const char *cmd,
+                    char *errbuf, size_t errlen);

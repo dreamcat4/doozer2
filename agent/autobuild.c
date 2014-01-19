@@ -69,13 +69,17 @@ autobuild_process(job_t *j)
   htsbuf_queue_t output;
   htsbuf_queue_init2(&output, 100000);
 
+  char errbuf[1024];
+
   job_run_command(j, j->autobuild,
                   (const char *[]){j->autobuild,
                       "-t", j->target, "-o", "deps", NULL},
-                  &output, j->autobuild);
+                  &output, j->autobuild,
+                  errbuf, sizeof(errbuf));
 
   job_run_command(j, j->autobuild,
                   (const char *[]){j->autobuild,
                       "-t", j->target, "-o", "build", NULL},
-                  &output, j->autobuild);
+                  &output, j->autobuild,
+                  errbuf, sizeof(errbuf));
 }

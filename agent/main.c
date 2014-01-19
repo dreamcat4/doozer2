@@ -1,3 +1,4 @@
+#include <sys/param.h>
 #include <sys/stat.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,6 +26,17 @@
 #include <sys/types.h>
 #include <regex.h>
 
+#include "heap.h"
+
+#ifdef linux
+#include "heap_btrfs.h"
+#endif
+
+
+struct heapmgr *projects_heap_mgr;
+struct heapmgr *buildenv_heap_mgr;
+uid_t build_uid;
+gid_t build_gid;
 
 static int running = 1;
 static int reload = 0;
@@ -49,7 +61,6 @@ doexit(int x)
 }
 
 
-
 /**
  *
  */
@@ -57,6 +68,66 @@ static void
 doreload(int x)
 {
   reload = 1;
+}
+
+
+/**
+ *
+ */
+static void
+get_uid_gid(void)
+{
+  cfg_root(root);
+
+  const char *user  = cfg_get_str(root, CFG("user"),  NULL);
+  const char *group = cfg_get_str(root, CFG("group"), NULL);
+
+  if(user == NULL) {
+    user = "nobody";
+    trace(LOG_INFO, "No user configurued, using: %s", user);
+  }
+
+  if(group == NULL) {
+    group = "nogroup";
+    trace(LOG_INFO, "No group configurued, using: %s", group);
+  }
+
+  struct passwd *p = getpwnam(user);
+  struct group *g = getgrnam(group);
+
+  if(p == NULL) {
+    trace(LOG_ERR, "Unable to find UID for user %s. Exiting", user);
+    exit(1);
+  }
+
+  if(g == NULL) {
+    trace(LOG_ERR, "Unable to find GID for group %s. Exiting", group);
+    exit(1);
+  }
+
+  build_uid = p->pw_uid;
+  build_gid = g->gr_gid;
+}
+
+
+/**
+ *
+ */
+static void
+create_heaps(void)
+{
+  cfg_root(root);
+
+  const char *projects_dir = cfg_get_str(root, CFG("projectsdir"), NULL);
+
+#ifdef linux
+  projects_heap_mgr = heap_btrfs_init(projects_dir);
+#endif
+
+  if(projects_heap_mgr == NULL) {
+    trace(LOG_ERR, "No heap manager for projects, giving up");
+    exit(1);
+  }
 }
 
 
@@ -85,6 +156,11 @@ main(int argc, char **argv)
     }
   }
 
+  if(getuid() != 0) {
+    fprintf(stderr, "Doozer agent need to be run as root");
+    exit(1);
+  }
+
   sigfillset(&set);
   sigprocmask(SIG_BLOCK, &set, NULL);
 
@@ -94,6 +170,13 @@ main(int argc, char **argv)
     fprintf(stderr, "Unable to load config (check -c option). Giving up\n");
     exit(1);
   }
+
+  get_uid_gid();
+
+  create_heaps();
+
+  setgid(build_gid);
+  seteuid(build_uid);
 
   git_threads_init();
 

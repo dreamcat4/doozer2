@@ -26,31 +26,30 @@
 void
 makefile_process(job_t *j)
 {
+  char errbuf[1024];
   htsbuf_queue_t output;
   htsbuf_queue_init2(&output, 100000);
 
   int r = job_run_command(j, "/usr/bin/env",
                           (const char *[]){"/usr/bin/env", "make", NULL},
-                          &output, "make");
+                          &output, "make", errbuf, sizeof(errbuf));
 
-
-  if(r == -1)
-    return;
 
   if(output.hq_size) {
-    if(artifact_add_htsbuf(j, "buildlog", "buildlog", NULL, &output, 1)) {
+    if(artifact_add_htsbuf(j, "buildlog", "buildlog",
+                           NULL, &output, 1)) {
+      job_report_temp_fail(j, "%s: Unable to send buildlog", "make");
       return;
     }
   }
 
-  if(aritfacts_wait(j)) {
+  if(aritfacts_wait(j))
     return;
-  }
 
   if(r == 0) {
     job_report_status(j, "done", "Build done");
-  } else if(r == -2) {
-    job_report_temp_fail(j, "%s: Command timed out", "make");
+  } else if(r < 0) {
+    job_report_temp_fail(j, "%s: %s", "make", errbuf);
   } else {
     job_report_fail(j, "%s: exited with %d", "make", r);
   }

@@ -33,7 +33,7 @@ typedef struct artifact {
 
 int artifact_add_file(job_t *j, const char *type, const char *filename,
                       const char *content_type, const char *path,
-                      int gzip)
+                      int gzip, char *errbuf, size_t errlen)
   __attribute__ ((warn_unused_result));
 
 int artifact_add_htsbuf(job_t *j, const char *type, const char *filename,

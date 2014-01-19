@@ -154,17 +154,18 @@ artifact_add(job_t *j, const char *type, const char *filename,
 int
 artifact_add_file(job_t *j, const char *type, const char *filename,
                   const char *content_type, const char *path,
-                  int gzip)
+                  int gzip, char *errbuf, size_t errlen)
 {
   int fd = open(path, O_RDONLY | O_CLOEXEC);
   if(fd == -1) {
-    job_report_fail(j, "Unable to open %s -- %s", path, strerror(errno));
+    snprintf(errbuf, errlen, "Unable to open %s -- %s",
+             path, strerror(errno));
     return -1;
   }
-
   struct stat st;
   if(fstat(fd, &st)) {
-    job_report_fail(j, "Unable to stat %s -- %s", path, strerror(errno));
+    snprintf(errbuf, errlen, "Unable to stat %s -- %s",
+             path, strerror(errno));
     close(fd);
     return -1;
   }
@@ -173,10 +174,9 @@ artifact_add_file(job_t *j, const char *type, const char *filename,
   void *mem = mmap(NULL, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
   close(fd);
   if(mem == MAP_FAILED) {
-    job_report_fail(j, "Unable to mmap %s -- %s", path, strerror(errno));
+    snprintf(errbuf, errlen, "Unable to mmap %s", path);
     return -1;
   }
-
   artifact_add(j, type, filename, content_type, mem, st.st_size, gzip);
   return 0;
 }
@@ -193,10 +193,8 @@ artifact_add_htsbuf(job_t *j, const char *type, const char *filename,
   size_t size = q->hq_size;
   void *mem = mmap(NULL, size, PROT_READ | PROT_WRITE,
                    MAP_PRIVATE | MAP_ANON, -1, 0);
-  if(mem == MAP_FAILED) {
-    job_report_fail(j, "Unable to mmap ANON -- %s", strerror(errno));
+  if(mem == MAP_FAILED)
     return -1;
-  }
 
   htsbuf_read(q, mem, size);
   assert(q->hq_size == 0);
