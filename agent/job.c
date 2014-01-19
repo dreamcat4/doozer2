@@ -1,5 +1,6 @@
 #include <sys/mman.h>
 #include <sys/param.h>
+#include <sys/wait.h>
 #include <assert.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -213,8 +214,9 @@ job_run_command(job_t *j,
         int chunk = MIN(len, sizeof(buf));
         htsbuf_read(q, buf, chunk);
 
-        if(print_to_stdout)
-          write(1, buf, chunk);
+        if(print_to_stdout) {
+          if(write(1, buf, chunk)) {}
+        }
 
         htsbuf_append(output, buf, chunk);
         len -= chunk;

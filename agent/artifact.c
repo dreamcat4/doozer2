@@ -227,7 +227,7 @@ read_artifact(void *ptr, size_t size, size_t nmemb, void *userdata)
 /**
  *
  */
-static size_t
+static int
 seek_artifact(void *instream, curl_off_t offset, int origin)
 {
   artifact_t *a = instream;
@@ -242,6 +242,8 @@ seek_artifact(void *instream, curl_off_t offset, int origin)
   case SEEK_END:
     new_fpos = a->size + offset;
     break;
+  default:
+    return -1;
   }
 
   if(new_fpos < 0)
@@ -380,6 +382,7 @@ artifact_xfer_thread(void *aux)
     a->result = r;
     pthread_cond_signal(&a->job->artifact_cond);
   }
+  return NULL;
 }
 
 
