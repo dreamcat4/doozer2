@@ -601,7 +601,8 @@ http_artifact(http_connection_t *hc, int argc, char **argv, int flags)
      !strcmp(encoding ?: "", "gzip") ||
      !mystrbegins(contenttype, "text/plain")) {
 
-    const char *basepath = cfg_get_str(pc, CFG("artifactPath"), NULL);
+    const char *basepath = project_get_artifact_path(project);
+
     if(basepath == NULL) {
       plog(p, "build/artifact",
            "Build #%d: Missing artifactPath for project %s",
@@ -611,9 +612,20 @@ http_artifact(http_connection_t *hc, int argc, char **argv, int flags)
 
     char path[PATH_MAX];
 
-    makedirs(basepath);
+    int r = makedirs(basepath);
+    if(r) {
+      plog(p, "build/artifact",
+           "Build #%d: Unable to create dir %s -- %s",
+           jobid, basepath, strerror(r));
+      return 500;
+    }
     snprintf(path, sizeof(path), "%s/%d", basepath, jobid);
-    mkdir(path, 0770);
+    if(mkdir(path, 0770) && errno != EEXIST) {
+      plog(p, "build/artifact",
+           "Build #%d: Unable to create dir %s -- %s",
+           jobid, path, strerror(errno));
+      return 500;
+    }
     snprintf(path, sizeof(path), "%s/%d/%s", basepath, jobid, name);
 
     int fd = open(path, O_CREAT|O_TRUNC|O_WRONLY, 0640);
@@ -878,7 +890,8 @@ buildmaster_check_expired_builds(conn_t *c)
  */
 static int
 delete_artifact(const char *name, const char *storage, const char *payload,
-                cfg_t *pc, char *errbuf, size_t errlen)
+                cfg_t *pc, const char *project,
+                char *errbuf, size_t errlen)
 {
   if(!strcmp(storage, "embedded")) {
     // Do nothing
@@ -899,8 +912,8 @@ delete_artifact(const char *name, const char *storage, const char *payload,
 
   } else if(!strcmp(storage, "file")) {
 
+    const char *basepath = project_get_artifact_path(project);
     char path[PATH_MAX];
-    const char *basepath = cfg_get_str(pc, CFG("artifactPath"), NULL);
     if(basepath == NULL) {
       snprintf(errbuf, errlen, "Missing artifactPath in config");
       return -1;
@@ -961,7 +974,7 @@ buildmaster_check_deleted_artifacts(conn_t *c)
   project_cfg(pc, project);
 
   r = delete_artifact(name, storage, payload, pc,
-                      errbuf, sizeof(errbuf));
+                      project, errbuf, sizeof(errbuf));
 
   if(!r)  {
     plog(p, "artifact/deleted", "Deleted artifact %s %s:%s", name, storage,

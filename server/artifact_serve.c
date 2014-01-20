@@ -333,12 +333,8 @@ send_artifact(http_connection_t *hc, const char *remain, void *opaque)
 
   } else if(!strcmp(storage, "file")) {
 
-    project_cfg(pc, project);
-    if(pc == NULL)
-      return 404;
-
     char path[PATH_MAX];
-    const char *basepath = cfg_get_str(pc, CFG("artifactPath"), NULL);
+    const char *basepath = project_get_artifact_path(project);
     if(basepath == NULL) {
       trace(LOG_INFO,
             "Missing artifactPath for project %s -- unable to locate artifacts",

@@ -237,15 +237,13 @@ do_builds(http_connection_t *hc, const char *project, int qtype)
  *
  */
 static int
-do_builds_one(http_connection_t *hc, const char *project, const char *remain)
+build_json(http_connection_t *hc, int argc, char **argv, int flags)
 {
+  const char *project = argv[1];
+  int id = atoi(argv[2]);
+
   cfg_root(root);
   const char *baseurl = cfg_get_str(root, CFG("artifactPrefix"), NULL);
-
-  if(remain == NULL)
-    return 404;
-
-  int id = atoi(remain);
 
   conn_t *c = db_get_conn();
   if(c == NULL)
@@ -299,10 +297,10 @@ do_builds_one(http_connection_t *hc, const char *project, const char *remain)
  *
  */
 static int
-do_releases_list(http_connection_t *hc, const char *project,
-                 const char *remain)
+releases_json(http_connection_t *hc, int argc, char **argv, int flags)
 {
   char path[PATH_MAX];
+  const char *project = argv[1];
 
   project_cfg(pc, project);
   if(pc == NULL)
@@ -332,11 +330,10 @@ do_releases_list(http_connection_t *hc, const char *project,
  *
  */
 static int
-do_revisions_one(http_connection_t *hc, const char *project,
-                 const char *remain)
+revision_json(http_connection_t *hc, int argc, char **argv, int flags)
 {
-  if(remain == NULL)
-    return 400;
+  const char *project = argv[1];
+  const char *revision = argv[2];
 
   project_t *p = project_get(project);
   if(p == NULL)
@@ -346,13 +343,9 @@ do_revisions_one(http_connection_t *hc, const char *project,
   if(c == NULL)
     return 500;
 
-  char *revision = mystrdupa(remain);
-  char *x = strchr(revision, '.');
-  if(x)
-    *x = 0;
 
   char ver[128];
-  if(git_describe(ver, sizeof(ver), p, remain, 0))
+  if(git_describe(ver, sizeof(ver), p, revision, 0))
     return 404;
 
 
@@ -393,35 +386,23 @@ do_revisions_one(http_connection_t *hc, const char *project,
 }
 
 
+/**
+ *
+ */
+static int
+builds_count(http_connection_t *hc, int argc, char **argv, int flags)
+{
+  return do_builds(hc, argv[1], 0);
+}
+
 
 /**
  *
  */
 static int
-restapi_projects(http_connection_t *hc, const char *remain,
-                 void *opaque)
+builds_json(http_connection_t *hc, int argc, char **argv, int flags)
 {
-  char *path = mystrdupa(remain);
-  const char *r;
-  const char *project = path;
-  char *x = strchr(path, '/');
-  if(x == NULL)
-    return 404;
-
-  *x++ = 0;
-
-  if((r = mystrbegins(x, "revisions/")) != NULL)
-    return do_revisions_one(hc, project, r);
-  if((r = mystrbegins(x, "builds/")) != NULL)
-    return do_builds_one(hc, project, r);
-  if(!strcmp(x, "builds.count"))
-    return do_builds(hc, project, 0);
-  if(!strcmp(x, "builds.json"))
-    return do_builds(hc, project, 1);
-  if(!strcmp(x, "releases.json"))
-    return do_releases_list(hc, project, r);
-
-  return 404;
+  return do_builds(hc, argv[1], 1);
 }
 
 
@@ -431,5 +412,14 @@ restapi_projects(http_connection_t *hc, const char *remain,
 void
 restapi_init(void)
 {
-  http_path_add("/projects",              NULL, restapi_projects);
+  http_route_add("/projects/([^/]+/[^/]+)/builds.count",
+                 builds_count, 0);
+  http_route_add("/projects/([^/]+/[^/]+)/builds.json",
+                 builds_json, 0);
+  http_route_add("/projects/([^/]+/[^/]+)/releases.json",
+                 releases_json, 0);
+  http_route_add("/projects/([^/]+/[^/]+)/builds/([0-9]+).json",
+                 build_json, 0);
+  http_route_add("/projects/([^/]+/[^/]+)/revisions/([^.]+).json",
+                 revision_json, 0);
 }

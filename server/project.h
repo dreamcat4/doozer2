@@ -54,6 +54,8 @@ void project_schedule_job(project_t *p, int mask);
 
 cfg_t *project_get_cfg(const char *id);
 
+const char *project_get_artifact_path(const char *id);
+
 /**
  * Project specific log
  *
