@@ -47,7 +47,6 @@ heap_simple_open(struct heapmgr *super, const char *id,
   heapmgr_simple_t *hm = (heapmgr_simple_t *)super;
   snprintf(outpath, PATH_MAX, "%s/%s", hm->path, id);
 
-
   struct stat st;
   int r = stat(outpath, &st);
   if(r == 0)
@@ -58,10 +57,11 @@ heap_simple_open(struct heapmgr *super, const char *id,
     return -1;
   }
 
-  if(mkdir(outpath, 0777)) {
+  r = makedirs(outpath);
+  if(r) {
     snprintf(errbuf, errlen,
              "Unable to create directory %s -- %s",
-             outpath, strerror(errno));
+             outpath, strerror(r));
     return -1;
   }
   return 0;
@@ -96,10 +96,7 @@ heap_simple_init(const char *path)
     return NULL;
   }
 
-
   heapmgr_simple_t *hm = calloc(1, sizeof(heapmgr_simple_t));
-
-
 
   hm->path = strdup(path);
   hm->super.dtor = heap_simple_dtor;

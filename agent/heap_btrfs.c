@@ -9,6 +9,7 @@
 #include <stdlib.h>
 
 #include "libsvc/trace.h"
+#include "libsvc/misc.h"
 
 #include "linux_btrfs.h"
 #include "heap.h"
@@ -41,12 +42,37 @@ heap_btrfs_dtor(heapmgr_t *super)
  *
  */
 static int
-heap_btrfs_open(struct heapmgr *super, const char *id,
+heap_btrfs_open(struct heapmgr *super, const char *id0,
                 char outpath[PATH_MAX],
                 char *errbuf, size_t errlen, int create)
 {
   heapmgr_btrfs_t *hm = (heapmgr_btrfs_t *)super;
-  snprintf(outpath, PATH_MAX, "%s/%s", hm->path, id);
+  const char *parent;
+  char *id = mystrdupa(id0);
+
+  char *p = strrchr(id, '/');
+  const char *subvolname;
+
+  if(p != NULL) {
+    *p = 0;
+    subvolname = p + 1;
+    char tmp[PATH_MAX];
+    snprintf(tmp, sizeof(tmp), "%s/%s", hm->path, id);
+    printf("parent dir for subvolumes: %s", tmp);
+
+    int err = makedirs(tmp);
+    if(err) {
+      snprintf(errbuf, errlen, "Unable to create directory %s -- %s",
+               tmp, strerror(err));
+      return -1;
+    }
+
+  } else {
+    parent = hm->path;
+    subvolname = id;
+  }
+
+  snprintf(outpath, PATH_MAX, "%s/%s", parent, subvolname);
 
   struct stat st;
   int r = stat(outpath, &st);
@@ -64,15 +90,15 @@ heap_btrfs_open(struct heapmgr *super, const char *id,
     return -1;
   }
 
-  int fd = open(hm->path, O_RDONLY);
+  int fd = open(parent, O_RDONLY);
   if(fd == -1) {
     snprintf(errbuf, errlen, "Unable to open parent dir %s -- %s",
-             hm->path, strerror(errno));
+             parent, strerror(errno));
     return -1;
   }
 
   struct btrfs_ioctl_vol_args args = {};
-  snprintf(args.name, BTRFS_SUBVOL_NAME_MAX, "%s", id);
+  snprintf(args.name, BTRFS_SUBVOL_NAME_MAX, "%s", subvolname);
   r = ioctl(fd, BTRFS_IOC_SUBVOL_CREATE, &args);
   int err = errno;
   close(fd);
@@ -82,7 +108,7 @@ heap_btrfs_open(struct heapmgr *super, const char *id,
 
   snprintf(errbuf, errlen,
            "Unable to create Btrfs subvolume %s at %s -- %s",
-           id, hm->path, strerror(err));
+           subvolname, parent, strerror(err));
   return -1;
 }
 
