@@ -32,9 +32,13 @@ SRCS =  agent/main.c \
 	agent/autobuild.c \
 	agent/makefile.c \
 	agent/artifact.c \
-	agent/heap_btrfs.c \
 	agent/spawn.c \
+	agent/heap_simple.c \
 
+
+ifeq ($(shell uname),Linux)
+SRCS +=	agent/heap_btrfs.c
+endif
 
 install: ${PROG}
 	install -D ${PROG} "${prefix}/bin/doozeragent"

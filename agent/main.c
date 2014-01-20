@@ -28,10 +28,6 @@
 
 #include "heap.h"
 
-#ifdef linux
-#include "heap_btrfs.h"
-#endif
-
 
 struct heapmgr *projects_heap_mgr;
 struct heapmgr *buildenv_heap_mgr;
@@ -119,13 +115,23 @@ create_heaps(void)
   cfg_root(root);
 
   const char *projects_dir = cfg_get_str(root, CFG("projectsdir"), NULL);
+  if(projects_dir == NULL) {
+    trace(LOG_ERR, "No projectsdir configured, giving up");
+    exit(1);
+  }
+
 
 #ifdef linux
   projects_heap_mgr = heap_btrfs_init(projects_dir);
 #endif
 
+  if(projects_heap_mgr == NULL)
+    projects_heap_mgr = heap_simple_init(projects_dir);
+
   if(projects_heap_mgr == NULL) {
-    trace(LOG_ERR, "No heap manager for projects, giving up");
+
+    trace(LOG_ERR, "No heap manager for projects in %s, giving up",
+          projects_dir);
     exit(1);
   }
 }

@@ -11,7 +11,7 @@
 #include "libsvc/trace.h"
 
 #include "linux_btrfs.h"
-#include "heap_btrfs.h"
+#include "heap.h"
 
 
 

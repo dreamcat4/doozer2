@@ -14,3 +14,9 @@ typedef struct heapmgr {
 
 } heapmgr_t;
 
+
+#ifdef linux
+heapmgr_t *heap_btrfs_init(const char *path);
+#endif
+
+heapmgr_t *heap_simple_init(const char *path);
