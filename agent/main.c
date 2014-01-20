@@ -80,12 +80,12 @@ get_uid_gid(void)
 
   if(user == NULL) {
     user = "nobody";
-    trace(LOG_INFO, "No user configurued, using: %s", user);
+    trace(LOG_INFO, "No user configured, using: %s", user);
   }
 
   if(group == NULL) {
     group = "nogroup";
-    trace(LOG_INFO, "No group configurued, using: %s", group);
+    trace(LOG_INFO, "No group configured, using: %s", group);
   }
 
   struct passwd *p = getpwnam(user);
@@ -163,7 +163,7 @@ main(int argc, char **argv)
   }
 
   if(getuid() != 0) {
-    fprintf(stderr, "Doozer agent need to be run as root");
+    fprintf(stderr, "Doozer agent need to be run as root\n");
     exit(1);
   }
 
