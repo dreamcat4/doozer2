@@ -305,11 +305,13 @@ tag_list_callback(const char *name, git_oid *oid, void *payload)
     git_oid_cpy(&r->oid, git_tag_target_id(tag));
   } else {
     git_oid_cpy(&r->oid, oid);
+    tag = NULL;
   }
 
   git_oid_fmt(r->oidtxt, &r->oid);
   LIST_INSERT_HEAD(aux->rl, r, link);
-  git_tag_free(tag);
+  if(tag != NULL)
+    git_tag_free(tag);
   return 0;
 }
 
