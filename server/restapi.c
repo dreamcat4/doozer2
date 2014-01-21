@@ -24,6 +24,21 @@
 /**
  *
  */
+static int
+json_output(http_connection_t *hc, htsmsg_t *m)
+{
+  char *json = htsmsg_json_serialize_to_str(m, 1);
+  htsmsg_destroy(m);
+
+  htsbuf_append_prealloc(&hc->hc_reply, json, strlen(json));
+  http_output_content(hc, "application/json");
+  return 0;
+}
+
+
+/**
+ *
+ */
 static htsmsg_t *
 build_to_htsmsg(db_stmt_t *q)
 {
@@ -214,12 +229,7 @@ do_builds(http_connection_t *hc, const char *project, int qtype)
     htsmsg_add_msg(list, NULL, m);
   }
 
-  char *json = htsmsg_json_serialize_to_str(list, 1);
-  htsmsg_destroy(list);
-
-  htsbuf_append_prealloc(&hc->hc_reply, json, strlen(json));
-  http_output_content(hc, "application/json");
-  return 0;
+  return json_output(hc, list);
 }
 
 
@@ -274,12 +284,7 @@ build_json(http_connection_t *hc, int argc, char **argv, int flags)
 
   htsmsg_add_msg(m, "artifacts", list);
 
-  char *json = htsmsg_json_serialize_to_str(m, 1);
-  htsmsg_destroy(m);
-
-  htsbuf_append_prealloc(&hc->hc_reply, json, strlen(json));
-  http_output_content(hc, "application/json");
-  return 0;
+  return json_output(hc, m);
 }
 
 
@@ -367,12 +372,7 @@ revision_json(http_connection_t *hc, int argc, char **argv, int flags)
   htsmsg_add_str(m, "version", ver);
   htsmsg_add_msg(m, "builds", list);
 
-  char *json = htsmsg_json_serialize_to_str(m, 1);
-  htsmsg_destroy(m);
-
-  htsbuf_append_prealloc(&hc->hc_reply, json, strlen(json));
-  http_output_content(hc, "application/json");
-  return 0;
+  return json_output(hc, m);
 }
 
 
@@ -399,17 +399,63 @@ builds_json(http_connection_t *hc, int argc, char **argv, int flags)
 /**
  *
  */
+static int
+do_projects(http_connection_t *hc, int qtype)
+{
+  project_t *p;
+
+  htsmsg_t *list = htsmsg_create_list();
+
+  pthread_mutex_lock(&projects_mutex);
+
+  LIST_FOREACH(p, &projects, p_link) {
+    htsmsg_t *m = htsmsg_create_map();
+    htsmsg_add_str(m, "id", p->p_id);
+    htsmsg_add_msg(list, NULL, m);
+  }
+  pthread_mutex_unlock(&projects_mutex);
+
+  return json_output(hc, list);
+}
+
+
+/**
+ *
+ */
+static int
+projects_json(http_connection_t *hc, int argc, char **argv, int flags)
+{
+  return do_projects(hc, 1);
+}
+
+
+/**
+ *
+ */
+static int
+projects_count(http_connection_t *hc, int argc, char **argv, int flags)
+{
+  return do_projects(hc, 0);
+}
+
+/**
+ *
+ */
 void
 restapi_init(void)
 {
-  http_route_add("/projects/([^/]+/[^/]+)/builds.count",
+  http_route_add("/projects.count$",
+                 projects_count, 0);
+  http_route_add("/projects.json$",
+                 projects_json, 0);
+  http_route_add("/projects/([^/]+/[^/]+)/builds.count$",
                  builds_count, 0);
-  http_route_add("/projects/([^/]+/[^/]+)/builds.json",
+  http_route_add("/projects/([^/]+/[^/]+)/builds.json$",
                  builds_json, 0);
-  http_route_add("/projects/([^/]+/[^/]+)/releases.json",
+  http_route_add("/projects/([^/]+/[^/]+)/releases.json$",
                  releases_json, 0);
-  http_route_add("/projects/([^/]+/[^/]+)/builds/([0-9]+).json",
+  http_route_add("/projects/([^/]+/[^/]+)/builds/([0-9]+).json$",
                  build_json, 0);
-  http_route_add("/projects/([^/]+/[^/]+)/revisions/([^.]+).json",
+  http_route_add("/projects/([^/]+/[^/]+)/revisions/([^.]+).json$",
                  revision_json, 0);
 }

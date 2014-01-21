@@ -24,24 +24,14 @@
 #include "releasemaker.h"
 
 
-LIST_HEAD(project_list, project);
-LIST_HEAD(pconf_list, pconf);
 
-static struct project_list projects;
+struct project_list projects;
 
-static pthread_mutex_t projects_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t projects_cond = PTHREAD_COND_INITIALIZER;
-static pthread_mutex_t project_cfg_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t projects_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t projects_cond = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t project_cfg_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-typedef struct pconf {
-  LIST_ENTRY(pconf) pc_link;
-  char *pc_id;
-  int pc_mark;
-  htsmsg_t *pc_msg;
-  time_t pc_mtime;  // mtime of last read conf
-} pconf_t;
-
-static struct pconf_list pconfs;
+struct pconf_list pconfs;
 
 
 static void project_notify_repo_update(project_t *p);
@@ -142,8 +132,6 @@ project_get(const char *id)
 
   LIST_FOREACH(p, &projects, p_link) {
     if(!strcmp(p->p_id, id)) {
-      LIST_REMOVE(p, p_link);
-      LIST_INSERT_HEAD(&projects, p, p_link);
       return p;
     }
   }

@@ -9,6 +9,29 @@
 #define PROJECT_JOB_GENERATE_RELEASES  0x4
 #define PROJECT_JOB_NOTIFY_REPO_UPDATE 0x8
 
+LIST_HEAD(project_list, project);
+LIST_HEAD(pconf_list, pconf);
+
+extern pthread_mutex_t projects_mutex;
+extern pthread_cond_t projects_cond;
+extern pthread_mutex_t project_cfg_mutex;
+
+extern struct project_list projects;
+extern struct pconf_list pconfs;
+
+
+/**
+ *
+ */
+typedef struct pconf {
+  LIST_ENTRY(pconf) pc_link;
+  char *pc_id;
+  int pc_mark;
+  htsmsg_t *pc_msg;
+  time_t pc_mtime;  // mtime of last read conf
+} pconf_t;
+
+
 /**
  *
  */
