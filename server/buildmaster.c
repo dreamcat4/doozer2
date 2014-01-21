@@ -448,10 +448,10 @@ http_artifact(http_connection_t *hc, int argc, char **argv, int flags)
   const char *name      = http_arg_get(&hc->hc_req_args, "name");
   const char *md5sum    = http_arg_get(&hc->hc_req_args, "md5sum");
   const char *sha1sum   = http_arg_get(&hc->hc_req_args, "sha1sum");
+  const char *origsizetxt=http_arg_get(&hc->hc_req_args, "origsize");
 
   const char *encoding     = http_arg_get(&hc->hc_args, "content-encoding");
   const char *contenttype  = http_arg_get(&hc->hc_args, "content-type");
-
 
   if(jobidstr == NULL ||
      jobsecret == NULL ||
@@ -466,6 +466,7 @@ http_artifact(http_connection_t *hc, int argc, char **argv, int flags)
      hc->hc_post_len == 0)
     return 400;
 
+  int origsize = origsizetxt ? atoi(origsizetxt) : 0;
   int jobid = atoi(jobidstr);
 
   if(hc->hc_cmd != HTTP_CMD_PUT)
@@ -575,7 +576,7 @@ http_artifact(http_connection_t *hc, int argc, char **argv, int flags)
              bucket, redir_path, sig, expire, awsid);
     http_redirect(hc, location, HTTP_STATUS_TEMPORARY_REDIRECT);
 
-    db_stmt_exec(s, "issssissss",
+    db_stmt_exec(s, "issssissssi",
                  jobid,
                  type,
                  redir_path,
@@ -585,7 +586,8 @@ http_artifact(http_connection_t *hc, int argc, char **argv, int flags)
                  md5sum,
                  sha1sum,
                  contenttype,
-                 encoding);
+                 encoding,
+                 origsize);
 
     plog(p, "build/artifact",
          "Build #%d: Artifact '%s' stored at s3://%s/%s",
@@ -655,7 +657,7 @@ http_artifact(http_connection_t *hc, int argc, char **argv, int flags)
 
     snprintf(path, sizeof(path), "%d/%s", jobid, name);
 
-    db_stmt_exec(s, "issssissss",
+    db_stmt_exec(s, "issssissssi",
                  jobid,
                  type,
                  path,
@@ -665,7 +667,8 @@ http_artifact(http_connection_t *hc, int argc, char **argv, int flags)
                  md5sum,
                  sha1sum,
                  contenttype,
-                 encoding);
+                 encoding,
+                 origsize);
 
     plog(p, "build/artifact",
          "Build #%d: Artifact '%s' stored as file '%s'",
@@ -673,7 +676,7 @@ http_artifact(http_connection_t *hc, int argc, char **argv, int flags)
 
   } else {
 
-    db_stmt_exec(s, "isbssissss",
+    db_stmt_exec(s, "isbssissssi",
                  jobid,
                  type,
                  hc->hc_post_data, hc->hc_post_len,
@@ -683,7 +686,8 @@ http_artifact(http_connection_t *hc, int argc, char **argv, int flags)
                  md5sum,
                  sha1sum,
                  contenttype,
-                 encoding);
+                 encoding,
+                 origsize);
 
     plog(p, "build/artifact",
          "Build #%d: Artifact '%s' stored in db", jobid, name);

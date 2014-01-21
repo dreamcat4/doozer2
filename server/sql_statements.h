@@ -14,7 +14,7 @@
 
 #define SQL_GET_BUILD_BY_ID "SELECT project,revision,target,type,agent,jobsecret,status,version FROM build WHERE id=?"
 
-#define SQL_INSERT_ARTIFACT "INSERT INTO artifact (build_id, type, payload, storage, name, size, md5, sha1, contenttype, encoding) VALUES (?,?,?,?,?,?,?,?,?,?)"
+#define SQL_INSERT_ARTIFACT "INSERT INTO artifact (build_id, type, payload, storage, name, size, md5, sha1, contenttype, encoding, origsize) VALUES (?,?,?,?,?,?,?,?,?,?,?)"
 
 #define SQL_BUILD_PROGRESS_UPDATE "UPDATE build SET progress_text=?,status_change=NOW() WHERE id=?"
 
