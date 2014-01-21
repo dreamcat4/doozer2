@@ -387,6 +387,7 @@ http_getjob(http_connection_t *hc, const char *remain, void *opaque)
         htsmsg_add_str(out, "version", bj.version);
         htsmsg_add_u32(out, "no_output", bj.no_output);
         htsmsg_json_serialize(out, &hc->hc_reply, 1);
+        htsmsg_destroy(out);
         content_type = "application/json";
       } else {
         content_type = "text/plain; charset=utf-8";
