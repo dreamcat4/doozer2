@@ -176,6 +176,8 @@ project_worker(void *aux)
 {
   project_t *p = aux;
 
+  plog(p, "system", "Starting worker thread");
+
   pthread_mutex_lock(&projects_mutex);
   while(p->p_pending_jobs) {
 
@@ -200,11 +202,13 @@ project_worker(void *aux)
     pthread_mutex_lock(&projects_mutex);
   }
 
-  plog(p, "system", "Stopping worker thread");
-
   // Terminate thread
+
   p->p_thread = 0;
   pthread_mutex_unlock(&projects_mutex);
+
+  plog(p, "system", "Stopping worker thread");
+
   return NULL;
 }
 
@@ -258,7 +262,6 @@ project_thread(void *aux)
       continue;
     }
 
-    plog(p, "system", "Starting worker thread");
     pthread_attr_t attr;
     pthread_attr_init(&attr);
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
