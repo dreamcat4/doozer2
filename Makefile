@@ -48,5 +48,6 @@ uninstall:
 	rm -f "${prefix}/bin/doozerd" "${prefix}/bin/doozer"
 
 include libsvc/libsvc.mk
+-include config.local
 -include $(DEPS)
 
