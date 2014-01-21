@@ -145,7 +145,7 @@ do_send_file(http_connection_t *hc, const char *ct,
 static int
 send_patch(http_connection_t *hc, const char *oldsha1, const char *newsha1,
            const char *newpath, const char *newencoding,
-           conn_t *c, const char *basepath)
+           db_conn_t *c, const char *basepath)
 {
   if(newencoding != NULL && strcmp(newencoding, "gzip"))
     return 1;
@@ -178,7 +178,7 @@ send_patch(http_connection_t *hc, const char *oldsha1, const char *newsha1,
     // Make sure ''old'' file can be resolved before
     // we do anything else
 
-    MYSQL_STMT *s = db_stmt_get(c, SQL_GET_ARTIFACT_BY_SHA1);
+    db_stmt_t *s = db_stmt_get(c, SQL_GET_ARTIFACT_BY_SHA1);
 
     if(db_stmt_exec(s, "s", oldsha1)) {
       pthread_mutex_unlock(&patch_mutex);
@@ -202,7 +202,7 @@ send_patch(http_connection_t *hc, const char *oldsha1, const char *newsha1,
                           DB_RESULT_STRING(content_encoding),
                           NULL);
 
-    mysql_stmt_reset(s);
+    db_stmt_reset(s);
 
     if(r) {
       pthread_mutex_unlock(&patch_mutex);
@@ -281,11 +281,11 @@ send_artifact(http_connection_t *hc, const char *remain, void *opaque)
   if(remain == NULL)
     return 404;
 
-  conn_t *c = db_get_conn();
+  db_conn_t *c = db_get_conn();
   if(c == NULL)
     return 500;
 
-  MYSQL_STMT *s = db_stmt_get(c, SQL_GET_ARTIFACT_BY_SHA1);
+  db_stmt_t *s = db_stmt_get(c, SQL_GET_ARTIFACT_BY_SHA1);
 
   if(db_stmt_exec(s, "s", remain))
     return 500;
@@ -307,7 +307,7 @@ send_artifact(http_connection_t *hc, const char *remain, void *opaque)
                         DB_RESULT_STRING(content_encoding),
                         NULL);
 
-  mysql_stmt_reset(s);
+  db_stmt_reset(s);
 
   switch(r) {
   case DB_ERR_OTHER:

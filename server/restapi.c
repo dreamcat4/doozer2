@@ -25,7 +25,7 @@
  *
  */
 static htsmsg_t *
-build_to_htsmsg(MYSQL_STMT *q)
+build_to_htsmsg(db_stmt_t *q)
 {
   int id;
   char revision[64];
@@ -88,7 +88,7 @@ build_to_htsmsg(MYSQL_STMT *q)
  *
  */
 static htsmsg_t *
-artifact_to_htsmsg(MYSQL_STMT *q, const char *artifact_prefix)
+artifact_to_htsmsg(db_stmt_t *q, const char *artifact_prefix)
 {
   int id;
   time_t created;
@@ -153,12 +153,11 @@ do_builds(http_connection_t *hc, const char *project, int qtype)
   int offset      = http_arg_get_int(&hc->hc_req_args, "offset", 0);
   int limit       = http_arg_get_int(&hc->hc_req_args, "limit", 10);
   char query[1024];
-  MYSQL_BIND in[10] = {};
 
   if(project == NULL)
     return 400;
 
-  conn_t *c = db_get_conn();
+  db_conn_t *c = db_get_conn();
   if(c == NULL)
     return 500;
 
@@ -183,22 +182,13 @@ do_builds(http_connection_t *hc, const char *project, int qtype)
   if(q == NULL)
     return 500;
 
-  in[0].buffer_type = MYSQL_TYPE_STRING;
-  in[0].buffer = (char *)project;
-  in[0].buffer_length = strlen(project);
+  db_args_t in[1];
 
-  if(mysql_stmt_bind_param(q, in)) {
-    trace(LOG_ERR,
-          "Failed to bind parameters to prepared statement %s -- %s",
-          mysql_stmt_sqlstate(q), mysql_stmt_error(q));
-    return 500;
-  }
+  in[0].type = 's';
+  in[0].str = project;
 
-  if(mysql_stmt_execute(q)) {
-    trace(LOG_ERR, "Failed to execute statement %s -- %s",
-          mysql_stmt_sqlstate(q), mysql_stmt_error(q));
+  if(db_stmt_execa(q, 1, in))
     return 500;
-  }
 
   if(qtype == 0) {
     int numrows;
@@ -245,7 +235,7 @@ build_json(http_connection_t *hc, int argc, char **argv, int flags)
   cfg_root(root);
   const char *baseurl = cfg_get_str(root, CFG("artifactPrefix"), NULL);
 
-  conn_t *c = db_get_conn();
+  db_conn_t *c = db_get_conn();
   if(c == NULL)
     return 500;
 
@@ -339,7 +329,7 @@ revision_json(http_connection_t *hc, int argc, char **argv, int flags)
   if(p == NULL)
     return 404;
 
-  conn_t *c = db_get_conn();
+  db_conn_t *c = db_get_conn();
   if(c == NULL)
     return 500;
 

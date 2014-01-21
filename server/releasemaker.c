@@ -232,7 +232,7 @@ find_successful_build(releasemaker_t *rm, git_oid *start_oid,
   git_oid oid;
   git_revwalk *walk;
   project_t *p = rm->p;
-  conn_t *c = db_get_conn();
+  db_conn_t *c = db_get_conn();
   build_t *b;
 
   if(c == NULL)
@@ -264,7 +264,7 @@ find_successful_build(releasemaker_t *rm, git_oid *start_oid,
   git_revwalk_sorting(walk, GIT_SORT_TOPOLOGICAL);
   oidtxt[40] = 0;
 
-  MYSQL_STMT *s = db_stmt_get(c,
+  db_stmt_t *s = db_stmt_get(c,
 			      "SELECT id,target,version "
 			      "FROM build "
 			      "WHERE revision=? "
@@ -391,14 +391,14 @@ releasemaker_list_builds(releasemaker_t *rm)
 
   find_successful_builds(rm);
 
-  conn_t *c = db_get_conn();
+  db_conn_t *c = db_get_conn();
 
   if(c == NULL)
     return DOOZER_ERROR_TRANSIENT;
 
   TAILQ_FOREACH(b, &rm->builds, b_global_link) {
 
-    MYSQL_STMT *s = db_stmt_get(c, SQL_GET_ARTIFACTS);
+    db_stmt_t *s = db_stmt_get(c, SQL_GET_ARTIFACTS);
 
     if(db_stmt_exec(s, "i", b->b_id))
       return DOOZER_ERROR_TRANSIENT;
@@ -773,7 +773,7 @@ do_delete_builds(const char *user,
     return 1;
   }
 
-  conn_t *c = db_get_conn();
+  db_conn_t *c = db_get_conn();
 
   if(c == NULL)
     return DOOZER_ERROR_TRANSIENT;
@@ -815,13 +815,13 @@ do_delete_builds(const char *user,
       return 1;
     }
 
-    msg(opaque, "%s%d deprecated builds", pfx, mysql_stmt_affected_rows(s));
+    msg(opaque, "%s%d deprecated builds", pfx, db_stmt_affected_rows(s));
 
     free(x);
   }
 
   if(by_status) {
-    MYSQL_STMT *s =
+    db_stmt_t *s =
       db_stmt_get(c,
                   "DELETE from build WHERE project=? AND status=?");
 
@@ -831,7 +831,7 @@ do_delete_builds(const char *user,
     }
 
     msg(opaque, "%s%d %s builds",
-        pfx, (int)mysql_stmt_affected_rows(s), by_status);
+        pfx, (int)db_stmt_affected_rows(s), by_status);
   }
 
   if(do_commit)

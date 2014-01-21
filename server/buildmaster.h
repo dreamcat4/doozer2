@@ -14,7 +14,7 @@ typedef struct buildjob {
   char project[128];
   char version[64];
   int no_output;
-  struct conn *db;
+  struct db_conn *db;
 } buildjob_t;
 
 

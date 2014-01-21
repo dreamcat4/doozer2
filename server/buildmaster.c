@@ -99,7 +99,7 @@ buildmaster_check_for_builds(project_t *p)
   int num_targets = cfg_list_length(tconf);
   char tmark[num_targets];
 
-  conn_t *c = db_get_conn();
+  db_conn_t *c = db_get_conn();
   if(c == NULL)
     return DOOZER_ERROR_TRANSIENT;
 
@@ -118,7 +118,7 @@ buildmaster_check_for_builds(project_t *p)
     plog(p, "build/check", "Checking build status for branch %s (%.8s)",
          b->name, b->oidtxt);
 
-    MYSQL_STMT *s = db_stmt_get(c, SQL_GET_TARGETS_FOR_BUILD);
+    db_stmt_t *s = db_stmt_get(c, SQL_GET_TARGETS_FOR_BUILD);
     if(db_stmt_exec(s, "ss", b->oidtxt, p->p_id)) {
       retval = DOOZER_ERROR_TRANSIENT;
       break;
@@ -179,7 +179,7 @@ add_build(project_t *p, const char *revision,
   if(git_describe(ver, sizeof(ver), p, revision, hash))
     return DOOZER_ERROR_PERMANENT;
 
-  conn_t *c = db_get_conn();
+  db_conn_t *c = db_get_conn();
   if(c == NULL)
     return DOOZER_ERROR_TRANSIENT;
 
@@ -220,7 +220,7 @@ getjob(char **targets, unsigned int numtargets, buildjob_t *bj,
   snprintf(query + l, sizeof(query) - l,
            ") ORDER BY created LIMIT 1 FOR UPDATE");
 
-  conn_t *c = db_get_conn();
+  db_conn_t *c = db_get_conn();
   if(c == NULL)
     return DOOZER_ERROR_PERMANENT;
 
@@ -228,30 +228,16 @@ getjob(char **targets, unsigned int numtargets, buildjob_t *bj,
   if(s == NULL)
     return DOOZER_ERROR_PERMANENT;
 
-  assert(mysql_stmt_param_count(s) == numtargets);
-
-  MYSQL_BIND in[numtargets];
-  memset(in, 0, sizeof(MYSQL_BIND) * numtargets);
-
-
+  db_args_t args[numtargets];
   for(i = 0; i < numtargets; i++) {
-    in[i].buffer_type = MYSQL_TYPE_STRING;
-    in[i].buffer = (char *)targets[i];
-    in[i].buffer_length = strlen(targets[i]);
-  }
-
-  if(mysql_stmt_bind_param(s, in)) {
-    trace(LOG_ERR,
-          "Failed to bind parameters to prepared statement %s -- %s",
-          mysql_stmt_sqlstate(s), mysql_stmt_error(s));
-    return -1;
+    args[i].type = 's';
+    args[i].str = targets[i];
   }
 
   db_begin(c);
 
-  if(mysql_stmt_execute(s)) {
-    trace(LOG_ERR, "Failed to execute statement %s -- %s",
-          mysql_stmt_sqlstate(s), mysql_stmt_error(s));
+  if(db_stmt_execa(s, numtargets, args)) {
+    db_rollback(c);
     return -1;
   }
 
@@ -264,7 +250,7 @@ getjob(char **targets, unsigned int numtargets, buildjob_t *bj,
                         DB_RESULT_INT(bj->no_output),
                         NULL);
 
-  mysql_stmt_reset(s);
+  db_stmt_reset(s);
 
   switch(r) {
   case DB_ERR_OTHER:
@@ -463,6 +449,7 @@ http_artifact(http_connection_t *hc, int argc, char **argv, int flags)
      *md5sum == 0 ||
      *name == 0 ||
      *type == 0 ||
+
      hc->hc_post_len == 0)
     return 400;
 
@@ -477,11 +464,11 @@ http_artifact(http_connection_t *hc, int argc, char **argv, int flags)
         "content-encoding:'%s' content-type:'%s'",
         jobid, name, encoding ?: "<unset>", contenttype ?: "<unset>");
 
-  conn_t *c = db_get_conn();
+  db_conn_t *c = db_get_conn();
   if(c == NULL)
     return 503;
 
-  MYSQL_STMT *s = db_stmt_get(c, SQL_GET_BUILD_BY_ID);
+  db_stmt_t *s = db_stmt_get(c, SQL_GET_BUILD_BY_ID);
 
   if(db_stmt_exec(s, "i", jobid))
     return 503;
@@ -505,7 +492,7 @@ http_artifact(http_connection_t *hc, int argc, char **argv, int flags)
                         DB_RESULT_STRING(status),
                         DB_RESULT_STRING(version));
 
-  mysql_stmt_reset(s);
+  db_stmt_reset(s);
 
   switch(r) {
   case DB_ERR_OTHER:
@@ -714,11 +701,11 @@ http_report(http_connection_t *hc, const char *remain, void *opaque)
 
   int jobid = atoi(jobidstr);
 
-  conn_t *c = db_get_conn();
+  db_conn_t *c = db_get_conn();
   if(c == NULL)
     return 503;
 
-  MYSQL_STMT *s = db_stmt_get(c, SQL_GET_BUILD_BY_ID);
+  db_stmt_t *s = db_stmt_get(c, SQL_GET_BUILD_BY_ID);
 
   if(db_stmt_exec(s, "i", jobid))
     return 503;
@@ -742,7 +729,7 @@ http_report(http_connection_t *hc, const char *remain, void *opaque)
                         DB_RESULT_STRING(status),
                         DB_RESULT_STRING(version));
 
-  mysql_stmt_reset(s);
+  db_stmt_reset(s);
 
   switch(r) {
   case DB_ERR_OTHER:
@@ -823,7 +810,7 @@ http_hello(http_connection_t *hc, const char *remain, void *opaque)
 
 
 static void
-buildmaster_check_expired_builds(conn_t *c)
+buildmaster_check_expired_builds(db_conn_t *c)
 {
   int timeout;
   int maxattempts;
@@ -835,7 +822,7 @@ buildmaster_check_expired_builds(conn_t *c)
   timeout     = cfg_get_int(root, CFG("buildmaster", "buildtimeout"), 300);
   maxattempts = cfg_get_int(root, CFG("buildmaster", "buildattempts"), 3);
 
-  MYSQL_STMT *s = db_stmt_get(c, SQL_GET_EXPIRED_BUILDS);
+  db_stmt_t *s = db_stmt_get(c, SQL_GET_EXPIRED_BUILDS);
 
   if(db_stmt_exec(s, "i", timeout))
     return;
@@ -943,14 +930,14 @@ delete_artifact(const char *name, const char *storage, const char *payload,
  *
  */
 static int
-buildmaster_check_deleted_artifacts(conn_t *c)
+buildmaster_check_deleted_artifacts(db_conn_t *c)
 {
   if(db_begin(c))
     return 0;
 
   cfg_root(root);
 
-  MYSQL_STMT *s = db_stmt_get(c, SQL_GET_DELETED_ARTIFACTS);
+  db_stmt_t *s = db_stmt_get(c, SQL_GET_DELETED_ARTIFACTS);
 
   if(db_stmt_exec(s, ""))
     return 0;
@@ -1006,7 +993,7 @@ buildmaster_periodic(void *aux)
 
     talloc_cleanup();
 
-    conn_t *c = db_get_conn();
+    db_conn_t *c = db_get_conn();
     if(c == NULL) {
       sleep(10);
       continue;
