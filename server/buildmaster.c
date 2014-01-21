@@ -234,25 +234,29 @@ getjob(char **targets, unsigned int numtargets, buildjob_t *bj,
     args[i].str = targets[i];
   }
 
-  db_begin(c);
+  if(db_begin(c))
+    return -1;
 
   if(db_stmt_execa(s, numtargets, args)) {
     db_rollback(c);
     return -1;
   }
 
-  int r = db_stream_row(0, s,
-                        DB_RESULT_INT(bj->id),
-                        DB_RESULT_STRING(bj->revision),
-                        DB_RESULT_STRING(bj->target),
-                        DB_RESULT_STRING(bj->project),
-                        DB_RESULT_STRING(bj->version),
-                        DB_RESULT_INT(bj->no_output),
-                        NULL);
+  db_err_t r = db_stream_row(0, s,
+                             DB_RESULT_INT(bj->id),
+                             DB_RESULT_STRING(bj->revision),
+                             DB_RESULT_STRING(bj->target),
+                             DB_RESULT_STRING(bj->project),
+                             DB_RESULT_STRING(bj->version),
+                             DB_RESULT_INT(bj->no_output),
+                             NULL);
 
   db_stmt_reset(s);
 
   switch(r) {
+  case DB_ERR_OK:
+    break;
+  case DB_ERR_DEADLOCK:
   case DB_ERR_OTHER:
     db_rollback(c);
     return DOOZER_ERROR_TRANSIENT;
@@ -338,7 +342,7 @@ http_getjob(http_connection_t *hc, const char *remain, void *opaque)
         htsmsg_t *out = htsmsg_create_map();
         htsmsg_add_str(out, "type", "none");
         htsmsg_json_serialize(out, &hc->hc_reply, 1);
-
+        htsmsg_destroy(out);
       } else {
         content_type = "text/plain; charset=utf-8";
         htsbuf_qprintf(&hc->hc_reply, "type=none\n");

@@ -778,8 +778,8 @@ do_delete_builds(const char *user,
   if(c == NULL)
     return DOOZER_ERROR_TRANSIENT;
 
-  db_begin(c);
-
+  if(db_begin(c))
+    return DOOZER_ERROR_TRANSIENT;
 
   if(deprecated) {
 
