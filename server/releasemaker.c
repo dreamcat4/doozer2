@@ -643,6 +643,10 @@ generate_update_tracks(releasemaker_t *rm)
       htsmsg_add_str(outtrack, "description", desc);
       htsmsg_add_msg(outtrack, "targets", outtargets);
 
+      const char *extra = cfg_get_str(rm->rt_cfg, CFG("extraInfo"), NULL);
+      if(extra != NULL)
+        htsmsg_add_str(outtrack, "extra", extra);
+
       htsmsg_add_msg(outtracks, NULL, outtrack);
     }
   }
