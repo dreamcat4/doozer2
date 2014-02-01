@@ -168,7 +168,7 @@ add_build(project_t *p, const char *revision,
   char ver[512];
   int no_output = 0;
 
-  if(git_describe(ver, sizeof(ver), p, revision, 1))
+  if(git_describe(ver, sizeof(ver), p, revision, 0))
     return DOOZER_ERROR_PERMANENT;
 
   conn_t *c = db_get_conn();
