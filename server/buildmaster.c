@@ -194,8 +194,8 @@ buildmaster_check_for_builds(project_t *p)
 
     project_doozer_conf_t pdc;
     if(get_pdc(p, b, &pdc)) {
-      retval = DOOZER_ERROR_TRANSIENT;
-      break;
+      plog(p, "build/check", "No build config in branch %s", b->name);
+      continue;
     }
 
     db_stmt_t *s = db_stmt_get(c, SQL_GET_TARGETS_FOR_BUILD);
