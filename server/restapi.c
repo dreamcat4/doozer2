@@ -448,14 +448,14 @@ restapi_init(void)
                  projects_count, 0);
   http_route_add("/projects.json$",
                  projects_json, 0);
-  http_route_add("/projects/([^/]+/[^/]+)/builds.count$",
+  http_route_add("/projects/([^/]+)/builds.count$",
                  builds_count, 0);
-  http_route_add("/projects/([^/]+/[^/]+)/builds.json$",
+  http_route_add("/projects/([^/]+)/builds.json$",
                  builds_json, 0);
-  http_route_add("/projects/([^/]+/[^/]+)/releases.json$",
+  http_route_add("/projects/([^/]+)/releases.json$",
                  releases_json, 0);
-  http_route_add("/projects/([^/]+/[^/]+)/builds/([0-9]+).json$",
+  http_route_add("/projects/([^/]+)/builds/([0-9]+).json$",
                  build_json, 0);
-  http_route_add("/projects/([^/]+/[^/]+)/revisions/([^.]+).json$",
+  http_route_add("/projects/([^/]+)/revisions/([^.]+).json$",
                  revision_json, 0);
 }
