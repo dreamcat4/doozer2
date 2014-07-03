@@ -7,6 +7,7 @@
 #include "git.h"
 #include "libsvc/threading.h"
 #include "libsvc/misc.h"
+#include "libsvc/talloc.h"
 
 /**
  * Must be called with lock held
@@ -165,7 +166,8 @@ cred_acquire_cb(git_cred **out,
     const char *pw = cfg_get_str(pc, CFG("gitrepo", "ssh", "password"), NULL);
 
     if(pub_path != NULL && priv_path != NULL) {
-      plog(p, "git/repo", "Trying SSH key authentication");
+      plog(p, "git/repo", "Trying SSH key authentication using %s %s",
+           pub_path, priv_path);
       return git_cred_ssh_key_new(out, username, pub_path, priv_path, pw);
     }
   }
@@ -618,4 +620,103 @@ const char *giterr(void)
   if(ge == NULL)
     return NULL;
   return ge->message;
+}
+
+
+int
+git_get_file(project_t *p, const git_oid *oid,
+             const char *path, void **datap, size_t *sizep,
+             char *errbuf, size_t errlen)
+{
+  git_tree *tree = NULL;
+  git_commit *commit = NULL;
+  git_object *dir = NULL;
+  git_object *blob = NULL;
+  const git_tree_entry *e;
+
+  char *filename = mystrdupa(path);
+  char *next;
+
+  int r = -1;
+
+  scoped_lock(&p->p_repo_mutex);
+
+  if(git_commit_lookup(&commit, p->p_repo, oid)) {
+    snprintf(errbuf, errlen,
+             "Unable to lookup commit id when looking for manifest");
+    return -1;
+  }
+
+  if(git_commit_tree(&tree, commit)) {
+    snprintf(errbuf, errlen,
+             "Unable to open git tree when looking for manifest");
+    goto cleanup;
+  }
+
+  while((next = strchr(filename, '/')) != NULL) {
+    while(*next == '/')
+      *next++ = 0;
+
+    // Directory (or tree) component
+
+    printf("filename=%s\n", filename);
+
+    if((e = git_tree_entry_byname(tree, filename)) == NULL)  {
+      snprintf(errbuf, errlen,
+               "'%s' directory not found", filename);
+      goto cleanup;
+    }
+
+    if(git_tree_entry_to_object(&dir, p->p_repo, e)) {
+      snprintf(errbuf, errlen,
+               "Unable to lookup '%s' tree object", filename);
+      goto cleanup;
+    }
+
+    if(git_object_type(dir) != GIT_OBJ_TREE) {
+      snprintf(errbuf, errlen,
+               "'%s' is not a tree object", filename);
+      goto cleanup;
+    }
+
+    git_tree_free(tree);
+    tree = (git_tree *)dir;
+    dir = NULL;
+    filename = next;
+  }
+
+  if((e = git_tree_entry_byname((git_tree *)tree, filename)) == NULL)  {
+    snprintf(errbuf, errlen, "'%s' not found", filename);
+    goto cleanup;
+  }
+
+  if(git_tree_entry_to_object(&blob, p->p_repo, e)) {
+    snprintf(errbuf, errlen, "Unable to lookup '%s' object", filename);
+    goto cleanup;
+  }
+
+  if(git_object_type(blob) != GIT_OBJ_BLOB) {
+    snprintf(errbuf, errlen, "'%s' is not a file", filename);
+    goto cleanup;
+  }
+
+
+  size_t size = git_blob_rawsize((git_blob *)blob);
+  char *data = talloc_malloc(size + 1);
+  memcpy(data, git_blob_rawcontent((git_blob *)blob), size);
+  data[size] = 0;
+
+  if(sizep != NULL)
+    *sizep = size;
+
+  *datap = data;
+  r = 0;
+
+ cleanup:
+  git_object_free(blob);
+  if(tree != NULL)
+    git_tree_free(tree);
+  if(commit != NULL)
+    git_commit_free(commit);
+  return r;
 }

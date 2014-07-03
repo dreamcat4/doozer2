@@ -8,7 +8,7 @@
 
 #define SQL_GET_TARGETS_FOR_BUILD "SELECT target,id,status FROM build WHERE revision = ? AND project = ?"
 
-#define SQL_INSERT_BUILD "INSERT INTO build (project,revision,target,type,status,version,no_output) VALUES (?,?,?,?,?,?,?)"
+#define SQL_INSERT_BUILD "INSERT INTO build (project,revision,target,type,status,version,no_output,buildenv) VALUES (?,?,?,?,?,?,?,?)"
 
 #define SQL_ALLOC_BUILD "UPDATE build SET agent=?, status=?, status_change=NOW(), buildstart=NOW(), attempts = attempts + 1, jobsecret=? WHERE id=?"
 

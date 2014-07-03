@@ -36,4 +36,8 @@ int git_changelog(struct change_queue *cq, project_t *p, const git_oid *rev,
 
 void git_changlog_free(struct change_queue *cq);
 
+int git_get_file(project_t *p, const git_oid *oid,
+                 const char *path, void **datap, size_t *sizep,
+                 char *errbuf, size_t errlen);
+
 const char *giterr(void);

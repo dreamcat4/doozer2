@@ -339,7 +339,7 @@ projects_init(void)
  *
  */
 static void
-project_load_conf(char *fname, const char *path, const char *org)
+project_load_conf(char *fname, const char *path)
 {
   char buf[PATH_MAX];
 
@@ -354,13 +354,10 @@ project_load_conf(char *fname, const char *path, const char *org)
 
   snprintf(buf, sizeof(buf), "%s/%s.json", path, fname);
 
-  char id[512];
-  snprintf(id, sizeof(id), "%s/%s", org, fname);
-
   pconf_t *pc;
 
   LIST_FOREACH(pc, &pconfs, pc_link)
-    if(!strcmp(pc->pc_id, id))
+    if(!strcmp(pc->pc_id, fname))
       break;
 
   int err;
@@ -368,7 +365,7 @@ project_load_conf(char *fname, const char *path, const char *org)
   char *json = readfile(buf, &err, &mtime);
   if(json == NULL) {
     trace(LOG_ERR, "Unable to read file %s -- %s", buf, strerror(err));
-    trace(LOG_ERR, "Config for project '%s' not updated", id);
+    trace(LOG_ERR, "Config for project '%s' not updated", fname);
     if(pc != NULL)
       pc->pc_mark = 0;
     return;
@@ -379,7 +376,7 @@ project_load_conf(char *fname, const char *path, const char *org)
   free(json);
   if(m == NULL) {
     trace(LOG_ERR, "Unable to parse file %s -- %s", buf, errbuf);
-    trace(LOG_ERR, "Config for project '%s' not updated", id);
+    trace(LOG_ERR, "Config for project '%s' not updated", fname);
     if(pc != NULL)
       pc->pc_mark = 0;
     return;
@@ -388,7 +385,7 @@ project_load_conf(char *fname, const char *path, const char *org)
   if(pc == NULL) {
     pc = calloc(1, sizeof(pconf_t));
     LIST_INSERT_HEAD(&pconfs, pc, pc_link);
-    pc->pc_id = strdup(id);
+    pc->pc_id = strdup(fname);
   } else {
     pc->pc_mark = 0;
 
@@ -401,7 +398,7 @@ project_load_conf(char *fname, const char *path, const char *org)
   pc->pc_msg = m;
   htsmsg_retain(m);
 
-  project_t *p = project_init(id, pc->pc_mtime != mtime);
+  project_t *p = project_init(fname, pc->pc_mtime != mtime);
 
   pc->pc_mtime = mtime;
 
@@ -413,37 +410,9 @@ project_load_conf(char *fname, const char *path, const char *org)
   else
     p->p_next_refresh = 0;
 
-  trace(LOG_INFO, "%s: Config loaded", id);
+  trace(LOG_INFO, "%s: Config loaded", fname);
 }
 
-
-/**
- *
- */
-static void
-project_load_dir(char *fname, const char *path)
-{
-  if(*fname == '#' || *fname == '.')
-    return;
-
-  char buf[PATH_MAX];
-  snprintf(buf, sizeof(buf), "%s/%s", path, fname);
-
-  struct dirent **namelist;
-  int n = scandir(buf, &namelist, NULL, NULL);
-  if(n < 0) {
-    trace(LOG_ERR, "Unable to scan project config dir %s -- %s",
-          path, strerror(errno));
-    return;
-  }
-
-  while(n--) {
-    if(namelist[n]->d_type == DT_REG)
-      project_load_conf(namelist[n]->d_name, buf, fname);
-    free(namelist[n]);
-  }
-  free(namelist);
-}
 
 
 /**
@@ -474,8 +443,8 @@ projects_reload(void)
     pc->pc_mark = 1;
 
   while(n--) {
-    if(namelist[n]->d_type == DT_DIR)
-      project_load_dir(namelist[n]->d_name, path);
+    if(namelist[n]->d_type == DT_REG)
+      project_load_conf(namelist[n]->d_name, path);
     free(namelist[n]);
   }
   free(namelist);

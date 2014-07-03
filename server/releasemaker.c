@@ -101,7 +101,7 @@ write_manifest(releasemaker_t *rm, htsmsg_t *m, const char *name)
  * Given a project + commit OID and a target, open
  * Manifests/<target>.json and return it
  *
- *
+ * This should use common stuff from git.c instead
  */
 static htsmsg_t *
 get_embedded_manifest(project_t *p, const char *target,

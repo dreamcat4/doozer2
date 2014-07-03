@@ -25,7 +25,8 @@
 #include "s3.h"
 
 static int add_build(project_t *p, const char *revision,
-                     const char *target, const char *reason);
+                     const char *target, const char *buildenv,
+                     const char *reason);
 
 
 /**
@@ -71,6 +72,88 @@ find_branch_config(project_t *p, cfg_t *bmconf, const char *id)
   return NULL;
 }
 
+
+typedef struct target_conf {
+  const char *tc_name;
+  const char *tc_buildenv;
+  int tc_mark;
+} target_conf_t;
+
+
+typedef struct project_doozer_conf {
+  target_conf_t *pdc_targets;
+  int pdc_num_targets;
+
+} project_doozer_conf_t;
+
+
+
+/**
+ *
+ */
+static int
+get_pdc(project_t *p, const ref_t *r, project_doozer_conf_t *pdc)
+{
+  void *data;
+  char errbuf[512];
+
+  const char *fname = ".doozer.json";
+
+  if(git_get_file(p, &r->oid, fname, &data, NULL, errbuf, sizeof(errbuf))) {
+    plog(p, "build/check", "No '%s' found in '%s' (%s) -- %s",
+         fname, r->name, r->oidtxt, errbuf);
+    return -1;
+  }
+
+  htsmsg_t *doc = htsmsg_json_deserialize(data, errbuf, sizeof(errbuf));
+  if(doc == NULL) {
+    plog(p, "build/check", "Unable to decode '%s' from ref '%s' (%s) -- %s",
+         fname, r->name, r->oidtxt, errbuf);
+    return -1;
+  }
+
+  htsmsg_t *targets = htsmsg_get_map(doc, "targets");
+  if(targets == NULL) {
+    plog(p, "build/check", "'%s' Contains no 'targets' in '%s' (%s)",
+         fname, r->name, r->oidtxt);
+    return -1;
+  }
+
+  htsmsg_field_t *f;
+  int count = 0;
+  HTSMSG_FOREACH(f, targets)
+    count++;
+
+  pdc->pdc_targets = talloc_zalloc(count * sizeof(target_conf_t));
+
+  pdc->pdc_num_targets = count;
+
+  count = 0;
+  HTSMSG_FOREACH(f, targets) {
+    htsmsg_t *s = htsmsg_get_map_by_field(f);
+    target_conf_t *tc = &pdc->pdc_targets[count++];
+
+    if(s == NULL) {
+      plog(p, "build/check", "Unable to decode '%s' from ref '%s' (%s) -- %s",
+           fname, r->name, r->oidtxt, "Malformed 'targets' map");
+      htsmsg_destroy(doc);
+      return 1;
+    }
+
+    tc->tc_name = tstrdup(f->hmf_name);
+    const char *buildenv = htsmsg_get_str(s, "buildenv");
+    if(buildenv != NULL)
+      tc->tc_buildenv = tstrdup(buildenv);
+    else
+      tc->tc_buildenv = tc->tc_name;
+  }
+  htsmsg_destroy(doc);
+  return 0;
+}
+
+
+
+
 /**
  *
  */
@@ -89,15 +172,6 @@ buildmaster_check_for_builds(project_t *p)
     plog(p, "build/check", "Project lacks buildmaster config");
     return DOOZER_ERROR_PERMANENT;
   }
-
-  cfg_t *tconf = cfg_get_list(bmconf, "targets");
-  if(tconf == NULL) {
-    plog(p, "build/check", "Project lacks buildmaster.targets config");
-    return DOOZER_ERROR_PERMANENT;
-  }
-
-  int num_targets = cfg_list_length(tconf);
-  char tmark[num_targets];
 
   db_conn_t *c = db_get_conn();
   if(c == NULL)
@@ -118,14 +192,19 @@ buildmaster_check_for_builds(project_t *p)
     plog(p, "build/check", "Checking build status for branch %s (%.8s)",
          b->name, b->oidtxt);
 
+    project_doozer_conf_t pdc;
+    if(get_pdc(p, b, &pdc)) {
+      retval = DOOZER_ERROR_TRANSIENT;
+      break;
+    }
+
     db_stmt_t *s = db_stmt_get(c, SQL_GET_TARGETS_FOR_BUILD);
     if(db_stmt_exec(s, "ss", b->oidtxt, p->p_id)) {
       retval = DOOZER_ERROR_TRANSIENT;
       break;
     }
 
-    // Clear out marked targets
-    memset(tmark, 0, num_targets);
+    char *tmark = talloc_zalloc(pdc.pdc_num_targets);
 
     while(1) {
       char target[64];
@@ -140,19 +219,18 @@ buildmaster_check_for_builds(project_t *p)
       if(r)
         break;
 
-      for(int i = 0; i < num_targets; i++) {
-        const char *configured_target = cfg_get_str(tconf, CFGI(i), NULL);
-        if(!strcmp(configured_target, target))
+      for(int i = 0; i < pdc.pdc_num_targets; i++) {
+        if(!strcmp(pdc.pdc_targets[i].tc_name, target))
           tmark[i] = 1;
       }
     }
 
-    for(int i = 0; i < num_targets; i++) {
-      const char *configured_target = cfg_get_str(tconf, CFGI(i), NULL);
+    for(int i = 0; i < pdc.pdc_num_targets; i++) {
       if(tmark[i])
         continue;
 
-      add_build(p, b->oidtxt, configured_target, "Automatic build");
+      add_build(p, b->oidtxt, pdc.pdc_targets[i].tc_name,
+                pdc.pdc_targets[i].tc_buildenv, "Automatic build");
     }
   }
   git_repo_free_refs(&refs);
@@ -165,7 +243,7 @@ buildmaster_check_for_builds(project_t *p)
  */
 static int
 add_build(project_t *p, const char *revision,
-          const char *target, const char *reason)
+          const char *target, const char *buildenv, const char *reason)
 {
   char ver[512];
   int no_output = 0;
@@ -188,9 +266,9 @@ add_build(project_t *p, const char *revision,
        ver, revision, target, reason,
        no_output ? ", No artifacts will be stored" : "");
 
-  db_stmt_exec(db_stmt_get(c, SQL_INSERT_BUILD), "ssssssi",
+  db_stmt_exec(db_stmt_get(c, SQL_INSERT_BUILD), "ssssssis",
                p->p_id, revision, target, reason,
-               "pending", ver, no_output);
+               "pending", ver, no_output, buildenv);
   return 0;
 }
 
@@ -199,13 +277,15 @@ add_build(project_t *p, const char *revision,
  *
  */
 static int
-getjob(char **targets, unsigned int numtargets, buildjob_t *bj,
-       const char *agent)
+getjob(int selecting_targets, char **qualifiers, unsigned int numqualifiers,
+       buildjob_t *bj, const char *agent)
 {
-  if(numtargets == 0)
+  if(numqualifiers == 0)
     return DOOZER_ERROR_INVALID_ARGS;
 
   char query[1024];
+
+  const char *fc = selecting_targets ? "target" : "buildenv";
 
   int i, l = 0;
   l += snprintf(query, sizeof(query),
@@ -213,9 +293,9 @@ getjob(char **targets, unsigned int numtargets, buildjob_t *bj,
                 "FROM build "
                 "WHERE status='pending' AND (");
 
-  for(i = 0; i < numtargets; i++)
-    l += snprintf(query + l, sizeof(query) - l, "target=?%s",
-                  i != numtargets - 1 ? " OR " : " ");
+  for(i = 0; i < numqualifiers; i++)
+    l += snprintf(query + l, sizeof(query) - l, "%s=?%s", fc,
+                  i != numqualifiers - 1 ? " OR " : " ");
 
   snprintf(query + l, sizeof(query) - l,
            ") ORDER BY created LIMIT 1 FOR UPDATE");
@@ -228,16 +308,16 @@ getjob(char **targets, unsigned int numtargets, buildjob_t *bj,
   if(s == NULL)
     return DOOZER_ERROR_PERMANENT;
 
-  db_args_t args[numtargets];
-  for(i = 0; i < numtargets; i++) {
+  db_args_t args[numqualifiers];
+  for(i = 0; i < numqualifiers; i++) {
     args[i].type = 's';
-    args[i].str = targets[i];
+    args[i].str = qualifiers[i];
   }
 
   if(db_begin(c))
     return -1;
 
-  if(db_stmt_execa(s, numtargets, args)) {
+  if(db_stmt_execa(s, numqualifiers, args)) {
     db_rollback(c);
     return -1;
   }
@@ -288,8 +368,14 @@ http_getjob(http_connection_t *hc, const char *remain, void *opaque)
   agent  = http_arg_get(&hc->hc_req_args, "agent")  ?: hc->hc_username;
   secret = http_arg_get(&hc->hc_req_args, "secret") ?: hc->hc_password;
   accepthdr = http_arg_get(&hc->hc_args, "accept") ?: "";
-  char *targetsarg = http_arg_get(&hc->hc_req_args, "targets");
-  if(agent == NULL || secret == NULL || targetsarg == NULL)
+  char *qualifiersarg = http_arg_get(&hc->hc_req_args, "buildenvs");
+  int selecting_targets = 0;
+  if(qualifiersarg == NULL) {
+    qualifiersarg = http_arg_get(&hc->hc_req_args, "targets");
+    selecting_targets = 1;
+  }
+
+  if(agent == NULL || secret == NULL || qualifiersarg == NULL)
     return 400;
 
   const char *s = cfg_get_str(root, CFG("buildmaster", "agents",
@@ -310,15 +396,16 @@ http_getjob(http_connection_t *hc, const char *remain, void *opaque)
   }
 
   const char *content_type;
-  char *targets[64];
-  int numtargets = str_tokenize(targetsarg, targets, 64, ',');
   int fails = 0;
   time_t deadline = time(NULL) + longpolltimeout;
+
+  char *qualifiers[256];
+  int numqualifiers = str_tokenize(qualifiersarg, qualifiers, 256, ',');
 
   while(1) {
 
     buildjob_t bj;
-    int r = getjob(targets, numtargets, &bj, agent);
+    int r = getjob(selecting_targets, qualifiers, numqualifiers, &bj, agent);
 
     switch(r) {
     default:
@@ -1044,7 +1131,7 @@ buildmaster_add_build(const char *project, const char *branch,
   }
 
 
-  if(add_build(p, r->oidtxt, target, reason)) {
+  if(add_build(p, r->oidtxt, target, NULL, reason)) {
     msg(opaque, "Failed to enqueue build");
     goto bad;
   }
