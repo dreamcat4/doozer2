@@ -22,7 +22,7 @@ typedef struct buildjob {
 // Temporary until real command parser
 int
 buildmaster_add_build(const char *project, const char *branch,
-                      const char *target,
+                      const char *target, const char *buildenv,
                       const char *reason,
                       void (*msg)(void *opaque, const char *fmt, ...),
                       void *opaque);

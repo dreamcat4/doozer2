@@ -1107,7 +1107,8 @@ buildmaster_periodic(void *aux)
  */
 int
 buildmaster_add_build(const char *project, const char *branch,
-                      const char *target,  const char *reason,
+                      const char *target,  const char *buildenv,
+                      const char *reason,
                       void (*msg)(void *opaque, const char *fmt, ...),
                       void *opaque)
 {
@@ -1131,7 +1132,7 @@ buildmaster_add_build(const char *project, const char *branch,
   }
 
 
-  if(add_build(p, r->oidtxt, target, NULL, reason)) {
+  if(add_build(p, r->oidtxt, target, buildenv, reason)) {
     msg(opaque, "Failed to enqueue build");
     goto bad;
   }
@@ -1168,11 +1169,12 @@ buildmaster_cli_build(const char *user,
   char reason[256];
   snprintf(reason, sizeof(reason), "Requested by %s", user);
   return buildmaster_add_build(argv[0], argv[1], argv[2],
-                               reason, msg, opaque);
+                               argv[3], reason, msg, opaque);
 }
 
 CMD(buildmaster_cli_build,
     CMD_LITERAL("build"),
     CMD_VARSTR("project"),
     CMD_VARSTR("branch | revision"),
-    CMD_VARSTR("target"));
+    CMD_VARSTR("target"),
+    CMD_VARSTR("buildenv"));
