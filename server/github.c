@@ -5,6 +5,7 @@
 #include "libsvc/htsmsg_json.h"
 #include "libsvc/trace.h"
 #include "libsvc/cfg.h"
+#include "libsvc/urlshorten.h"
 
 #include "github.h"
 #include "project.h"
@@ -89,6 +90,7 @@ http_github(http_connection_t *hc, const char *remain, void *opaque)
       if(c == NULL)
         continue;
 
+      const char *url = htsmsg_get_str(c, "url");
       const char *msg = htsmsg_get_str(c, "message");
       htsmsg_t *a = htsmsg_get_map(c, "author");
       const char *author = a ? htsmsg_get_str(a, "name") : NULL;
@@ -100,6 +102,9 @@ http_github(http_connection_t *hc, const char *remain, void *opaque)
       int len;
       char buf[512];
       char ctx[128];
+
+      url = url ? urlshorten(url) : NULL;
+
       snprintf(ctx, sizeof(ctx), "changes/%s", ref);
 
       len = snprintf(buf, sizeof(buf),
@@ -122,7 +127,9 @@ http_github(http_connection_t *hc, const char *remain, void *opaque)
                         COLOR_RED "%s%d file%s removed",
                         added || modified ? ", "  : "",
                         removed, removed == 1 ? "" : "s");
-      snprintf(buf + len, sizeof(buf) - len, COLOR_OFF"]");
+
+      snprintf(buf + len, sizeof(buf) - len, COLOR_OFF"]%s%s",
+               url ? " " : "", url ?: "");
 
       plog(p, ctx, "%s", buf);
       plog(p, ctx, "%s", msg);
